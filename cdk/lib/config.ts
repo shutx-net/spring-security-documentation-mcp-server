@@ -15,20 +15,18 @@ export interface AppConfig {
     requestsPerTarget: number;
   };
 
-  waf: {
-    rateLimitPer5Min: number;
-    maxBodyBytes: number;
-  };
-
   schedule: string;
   scheduleTimezone: string;
 
-  cloudfrontOriginPrefixListId: string;
+  cloudflare: {
+    initialIpv4: string[];
+    initialIpv6: string[];
+    syncSchedule: string;
+    maxEntries: number;
+  };
 
   domain?: {
     domainName: string;
-    hostedZoneId: string;
-    hostedZoneName: string;
     certificateArn: string;
   };
 }
@@ -37,15 +35,13 @@ export function loadConfig(app: App): AppConfig {
   const ctx = <T>(key: string, fallback?: T): T => (app.node.tryGetContext(key) ?? fallback) as T;
 
   const domainName = ctx<string | null>('domainName', null);
-  const hostedZoneId = ctx<string | null>('hostedZoneId', null);
-  const hostedZoneName = ctx<string | null>('hostedZoneName', null);
   const certificateArn = ctx<string | null>('certificateArn', null);
 
-  const allDomainSet = domainName && hostedZoneId && hostedZoneName && certificateArn;
-  const someDomainSet = domainName || hostedZoneId || hostedZoneName || certificateArn;
+  const allDomainSet = domainName && certificateArn;
+  const someDomainSet = domainName || certificateArn;
   if (someDomainSet && !allDomainSet) {
     throw new Error(
-      'Custom domain requires all of: domainName, hostedZoneId, hostedZoneName, certificateArn (certificate must be in us-east-1).',
+      'Custom domain requires both: domainName and certificateArn (ACM cert in the same region as ALB).',
     );
   }
 
@@ -54,17 +50,11 @@ export function loadConfig(app: App): AppConfig {
     embeddingModelId: ctx<string>('embeddingModelId', 'amazon.titan-embed-text-v2:0'),
     embeddingDimension: ctx<number>('embeddingDimension', 1024),
     ecs: ctx<AppConfig['ecs']>('ecs'),
-    waf: ctx<AppConfig['waf']>('waf'),
     schedule: ctx<string>('schedule'),
     scheduleTimezone: ctx<string>('scheduleTimezone', 'UTC'),
-    cloudfrontOriginPrefixListId: ctx<string>('cloudfrontOriginPrefixListId'),
+    cloudflare: ctx<AppConfig['cloudflare']>('cloudflare'),
     domain: allDomainSet
-      ? {
-          domainName: domainName!,
-          hostedZoneId: hostedZoneId!,
-          hostedZoneName: hostedZoneName!,
-          certificateArn: certificateArn!,
-        }
+      ? { domainName: domainName!, certificateArn: certificateArn! }
       : undefined,
   };
 }

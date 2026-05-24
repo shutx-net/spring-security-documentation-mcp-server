@@ -4,19 +4,13 @@ import {
   Duration,
   RemovalPolicy,
   CfnOutput,
-  Fn,
   aws_ec2 as ec2,
   aws_ecs as ecs,
   aws_ecr as ecr,
   aws_elasticloadbalancingv2 as elbv2,
   aws_iam as iam,
   aws_logs as logs,
-  aws_cloudfront as cloudfront,
-  aws_cloudfront_origins as origins,
   aws_certificatemanager as acm,
-  aws_route53 as route53,
-  aws_route53_targets as targets,
-  aws_wafv2 as wafv2,
   aws_s3vectors as s3vectors,
   aws_s3 as s3,
 } from 'aws-cdk-lib';
@@ -37,7 +31,7 @@ export interface ServiceStackProps extends StackProps {
 
 export class ServiceStack extends Stack {
   public readonly ecrRepository: ecr.IRepository;
-  public readonly distribution: cloudfront.IDistribution;
+  public readonly loadBalancer: elbv2.IApplicationLoadBalancer;
 
   constructor(scope: Construct, id: string, props: ServiceStackProps) {
     super(scope, id, props);
@@ -146,15 +140,32 @@ export class ServiceStack extends Stack {
       internetFacing: true,
       securityGroup: albSecurityGroup,
       deletionProtection: false,
+      dropInvalidHeaderFields: true,
+      preserveHostHeader: true,
     });
+    this.loadBalancer = alb;
 
-    const listener = alb.addListener('HttpListener', {
-      port: 80,
-      protocol: elbv2.ApplicationProtocol.HTTP,
+    if (!config.domain) {
+      throw new Error(
+        'ACM certificate is required for the HTTPS listener. Set context "domainName" and "certificateArn".',
+      );
+    }
+
+    const certificate = acm.Certificate.fromCertificateArn(
+      this,
+      'AlbCertificate',
+      config.domain.certificateArn,
+    );
+
+    const httpsListener = alb.addListener('HttpsListener', {
+      port: 443,
+      protocol: elbv2.ApplicationProtocol.HTTPS,
+      certificates: [certificate],
+      sslPolicy: elbv2.SslPolicy.TLS13_RES,
       open: false,
     });
 
-    const targetGroup = listener.addTargets('EcsTarget', {
+    const targetGroup = httpsListener.addTargets('EcsTarget', {
       port: config.ecs.containerPort,
       protocol: elbv2.ApplicationProtocol.HTTP,
       targets: [service],
@@ -176,161 +187,11 @@ export class ServiceStack extends Stack {
       scaleOutCooldown: Duration.seconds(60),
     });
 
-    const webAcl = this.buildWebAcl(config);
-
-    const cachePolicy = new cloudfront.CachePolicy(this, 'McpCachePolicy', {
-      defaultTtl: Duration.seconds(0),
-      maxTtl: Duration.seconds(0),
-      minTtl: Duration.seconds(0),
-      headerBehavior: cloudfront.CacheHeaderBehavior.allowList('Authorization', 'Content-Type'),
-      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
-      queryStringBehavior: cloudfront.CacheQueryStringBehavior.all(),
-      enableAcceptEncodingGzip: true,
-      enableAcceptEncodingBrotli: true,
-    });
-
-    const originRequestPolicy = new cloudfront.OriginRequestPolicy(this, 'McpOriginRequestPolicy', {
-      headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
-        'Content-Type',
-        'Accept',
-        'User-Agent',
-      ),
-      cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
-      queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.all(),
-    });
-
-    const albOrigin = new origins.LoadBalancerV2Origin(alb, {
-      protocolPolicy: cloudfront.OriginProtocolPolicy.HTTP_ONLY,
-      httpPort: 80,
-      readTimeout: Duration.seconds(30),
-      keepaliveTimeout: Duration.seconds(5),
-    });
-
-    const distribution = new cloudfront.Distribution(this, 'Distribution', {
-      defaultBehavior: {
-        origin: albOrigin,
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-        cachePolicy,
-        originRequestPolicy,
-        compress: true,
-      },
-      webAclId: webAcl.attrArn,
-      priceClass: cloudfront.PriceClass.PRICE_CLASS_200,
-      minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
-      httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
-      ...(config.domain
-        ? {
-            domainNames: [config.domain.domainName],
-            certificate: acm.Certificate.fromCertificateArn(
-              this,
-              'CloudFrontCert',
-              config.domain.certificateArn,
-            ),
-          }
-        : {}),
-    });
-    this.distribution = distribution;
-
-    if (config.domain) {
-      const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'Zone', {
-        hostedZoneId: config.domain.hostedZoneId,
-        zoneName: config.domain.hostedZoneName,
-      });
-      new route53.ARecord(this, 'AliasRecord', {
-        zone,
-        recordName: Fn.select(0, Fn.split(`.${config.domain.hostedZoneName}`, config.domain.domainName)),
-        target: route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(distribution)),
-      });
-    }
-
     new CfnOutput(this, 'EcrRepositoryUri', { value: this.ecrRepository.repositoryUri });
-    new CfnOutput(this, 'AlbDnsName', { value: alb.loadBalancerDnsName });
-    new CfnOutput(this, 'DistributionDomainName', { value: distribution.distributionDomainName });
-    if (config.domain) {
-      new CfnOutput(this, 'PublicUrl', { value: `https://${config.domain.domainName}` });
-    }
-  }
-
-  private buildWebAcl(config: AppConfig): wafv2.CfnWebACL {
-    const rules: wafv2.CfnWebACL.RuleProperty[] = [
-      {
-        name: 'AWS-AWSManagedRulesCommonRuleSet',
-        priority: 0,
-        overrideAction: { none: {} },
-        statement: {
-          managedRuleGroupStatement: {
-            vendorName: 'AWS',
-            name: 'AWSManagedRulesCommonRuleSet',
-          },
-        },
-        visibilityConfig: {
-          cloudWatchMetricsEnabled: true,
-          metricName: 'CommonRuleSet',
-          sampledRequestsEnabled: true,
-        },
-      },
-      {
-        name: 'AWS-AWSManagedRulesKnownBadInputsRuleSet',
-        priority: 1,
-        overrideAction: { none: {} },
-        statement: {
-          managedRuleGroupStatement: {
-            vendorName: 'AWS',
-            name: 'AWSManagedRulesKnownBadInputsRuleSet',
-          },
-        },
-        visibilityConfig: {
-          cloudWatchMetricsEnabled: true,
-          metricName: 'KnownBadInputs',
-          sampledRequestsEnabled: true,
-        },
-      },
-      {
-        name: 'IpRateLimit',
-        priority: 10,
-        action: { block: {} },
-        statement: {
-          rateBasedStatement: {
-            limit: config.waf.rateLimitPer5Min,
-            aggregateKeyType: 'IP',
-          },
-        },
-        visibilityConfig: {
-          cloudWatchMetricsEnabled: true,
-          metricName: 'IpRateLimit',
-          sampledRequestsEnabled: true,
-        },
-      },
-      {
-        name: 'BodySizeLimit',
-        priority: 11,
-        action: { block: {} },
-        statement: {
-          sizeConstraintStatement: {
-            fieldToMatch: { body: {} },
-            comparisonOperator: 'GT',
-            size: config.waf.maxBodyBytes,
-            textTransformations: [{ priority: 0, type: 'NONE' }],
-          },
-        },
-        visibilityConfig: {
-          cloudWatchMetricsEnabled: true,
-          metricName: 'BodySizeLimit',
-          sampledRequestsEnabled: true,
-        },
-      },
-    ];
-
-    return new wafv2.CfnWebACL(this, 'WebAcl', {
-      defaultAction: { allow: {} },
-      scope: 'CLOUDFRONT',
-      visibilityConfig: {
-        cloudWatchMetricsEnabled: true,
-        metricName: `${config.appName}-webacl`,
-        sampledRequestsEnabled: true,
-      },
-      rules,
+    new CfnOutput(this, 'AlbDnsName', {
+      value: alb.loadBalancerDnsName,
+      description: 'Point Cloudflare CNAME to this DNS name',
     });
+    new CfnOutput(this, 'PublicUrl', { value: `https://${config.domain.domainName}` });
   }
 }
