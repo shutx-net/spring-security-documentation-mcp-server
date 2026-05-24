@@ -1,0 +1,14 @@
+{
+    "enabledPlugins": {
+        "deploy-on-aws@agent-plugins-for-aws": true
+    },
+    "extraKnownMarketplaces": {
+        "agent-plugins-for-aws": {
+            "source": {
+                "source": "github",
+                "repo": "awslabs/agent-plugins"
+            }
+        }
+    },
+    "theme": "dark"
+}

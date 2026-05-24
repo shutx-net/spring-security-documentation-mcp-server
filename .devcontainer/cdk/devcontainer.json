@@ -1,0 +1,5 @@
+{
+    "name": "CDK Dev Container",
+    "image": "mcr.microsoft.com/devcontainers/typescript-node:24",
+    "postCreateCommand": "bash ${containerWorkspaceFolder}/.devcontainer/scripts/install-claude-code.sh && bash ${containerWorkspaceFolder}/.devcontainer/scripts/install-uvx.sh"
+}
