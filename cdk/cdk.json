@@ -1,0 +1,52 @@
+{
+  "app": "npx ts-node --prefer-ts-exts bin/app.ts",
+  "watch": {
+    "include": ["**"],
+    "exclude": [
+      "README.md",
+      "cdk*.json",
+      "**/*.d.ts",
+      "**/*.js",
+      "tsconfig.json",
+      "package*.json",
+      "yarn.lock",
+      "node_modules"
+    ]
+  },
+  "context": {
+    "appName": "spring-sec-mcp",
+
+    "embeddingModelId": "amazon.titan-embed-text-v2:0",
+    "embeddingDimension": 1024,
+
+    "ecs": {
+      "cpu": 512,
+      "memoryMiB": 1024,
+      "containerPort": 8080,
+      "desiredCount": 0,
+      "minCapacity": 1,
+      "maxCapacity": 10,
+      "requestsPerTarget": 500
+    },
+
+    "waf": {
+      "rateLimitPer5Min": 2000,
+      "maxBodyBytes": 8192
+    },
+
+    "schedule": "cron(0 15 * * ? *)",
+    "scheduleTimezone": "UTC",
+
+    "cloudfrontOriginPrefixListId": "pl-3b927c52",
+
+    "domainName": null,
+    "hostedZoneId": null,
+    "hostedZoneName": null,
+    "certificateArn": null,
+
+    "@aws-cdk/aws-iam:minimizePolicies": true,
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/aws-ecs:disableExplicitDeploymentControllerForCircuitBreaker": true,
+    "@aws-cdk/aws-s3:serverAccessLogsUseBucketPolicy": true
+  }
+}
