@@ -1,0 +1,11 @@
+{
+    "name": "Go MCP SDK Dev Container",
+    "image": "mcr.microsoft.com/devcontainers/go",
+    "customizations": {
+        "vscode": {
+            "extensions": ["golang.go", "ms-vsliveshare.vsliveshare"]
+        }
+    },
+
+    "postCreateCommand": "bash ${containerWorkspaceFolder}/.devcontainer/scripts/install-claude-code.sh"
+}
