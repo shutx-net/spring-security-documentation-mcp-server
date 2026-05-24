@@ -1,4 +1,4 @@
-module github.com/1106ando/spring-security-documentation-mcp-server
+module github.com/shutx-net/spring-security-documentation-mcp-server
 
 go 1.26.3
 
