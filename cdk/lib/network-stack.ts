@@ -1,7 +1,15 @@
+import * as path from 'path';
 import {
   Stack,
   StackProps,
+  Duration,
+  RemovalPolicy,
   aws_ec2 as ec2,
+  aws_lambda as lambda,
+  aws_events as events,
+  aws_events_targets as eventTargets,
+  aws_iam as iam,
+  aws_logs as logs,
 } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { AppConfig } from './config';
@@ -15,6 +23,8 @@ export class NetworkStack extends Stack {
   public readonly albSecurityGroup: ec2.SecurityGroup;
   public readonly ecsSecurityGroup: ec2.SecurityGroup;
   public readonly endpointSecurityGroup: ec2.SecurityGroup;
+  public readonly cloudflarePrefixListV4: ec2.CfnPrefixList;
+  public readonly cloudflarePrefixListV6: ec2.CfnPrefixList;
 
   constructor(scope: Construct, id: string, props: NetworkStackProps) {
     super(scope, id, props);
@@ -32,15 +42,34 @@ export class NetworkStack extends Stack {
       restrictDefaultSecurityGroup: true,
     });
 
+    this.cloudflarePrefixListV4 = new ec2.CfnPrefixList(this, 'CloudflareIpv4', {
+      prefixListName: `${config.appName}-cloudflare-ipv4`,
+      addressFamily: 'IPv4',
+      maxEntries: config.cloudflare.maxEntries,
+      entries: config.cloudflare.initialIpv4.map((cidr) => ({ cidr, description: 'cloudflare' })),
+    });
+
+    this.cloudflarePrefixListV6 = new ec2.CfnPrefixList(this, 'CloudflareIpv6', {
+      prefixListName: `${config.appName}-cloudflare-ipv6`,
+      addressFamily: 'IPv6',
+      maxEntries: config.cloudflare.maxEntries,
+      entries: config.cloudflare.initialIpv6.map((cidr) => ({ cidr, description: 'cloudflare' })),
+    });
+
     this.albSecurityGroup = new ec2.SecurityGroup(this, 'AlbSg', {
       vpc: this.vpc,
-      description: 'ALB — accepts traffic from CloudFront origin-facing prefix list only',
+      description: 'ALB — accepts HTTPS from Cloudflare IP ranges only',
       allowAllOutbound: false,
     });
     this.albSecurityGroup.addIngressRule(
-      ec2.Peer.prefixList(config.cloudfrontOriginPrefixListId),
-      ec2.Port.tcp(80),
-      'CloudFront origin-facing prefix list (HTTP)',
+      ec2.Peer.prefixList(this.cloudflarePrefixListV4.attrPrefixListId),
+      ec2.Port.tcp(443),
+      'Cloudflare IPv4',
+    );
+    this.albSecurityGroup.addIngressRule(
+      ec2.Peer.prefixList(this.cloudflarePrefixListV6.attrPrefixListId),
+      ec2.Port.tcp(443),
+      'Cloudflare IPv6',
     );
 
     this.ecsSecurityGroup = new ec2.SecurityGroup(this, 'EcsSg', {
@@ -103,5 +132,61 @@ export class NetworkStack extends Stack {
         privateDnsEnabled: true,
       });
     }
+
+    this.buildCloudflareSync(config);
+  }
+
+  private buildCloudflareSync(config: AppConfig): void {
+    const fnLogGroup = new logs.LogGroup(this, 'CloudflareIpSyncLogs', {
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    const fn = new lambda.Function(this, 'CloudflareIpSyncFn', {
+      runtime: lambda.Runtime.NODEJS_22_X,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', 'lambda', 'cloudflare-sync')),
+      timeout: Duration.seconds(30),
+      memorySize: 256,
+      logGroup: fnLogGroup,
+      environment: {
+        PREFIX_LIST_ID_V4: this.cloudflarePrefixListV4.attrPrefixListId,
+        PREFIX_LIST_ID_V6: this.cloudflarePrefixListV6.attrPrefixListId,
+      },
+    });
+
+    const prefixListArns = [
+      this.formatArn({
+        service: 'ec2',
+        resource: 'prefix-list',
+        resourceName: this.cloudflarePrefixListV4.attrPrefixListId,
+      }),
+      this.formatArn({
+        service: 'ec2',
+        resource: 'prefix-list',
+        resourceName: this.cloudflarePrefixListV6.attrPrefixListId,
+      }),
+    ];
+
+    fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ec2:DescribeManagedPrefixLists'],
+        resources: ['*'],
+      }),
+    );
+    fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ec2:GetManagedPrefixListEntries', 'ec2:ModifyManagedPrefixList'],
+        resources: prefixListArns,
+      }),
+    );
+
+    new events.Rule(this, 'CloudflareIpSyncSchedule', {
+      schedule: events.Schedule.expression(config.cloudflare.syncSchedule),
+      targets: [new eventTargets.LambdaFunction(fn, { retryAttempts: 2 })],
+      description: 'Weekly Cloudflare IP range sync',
+    });
+
+    fn.applyRemovalPolicy(RemovalPolicy.DESTROY);
   }
 }
