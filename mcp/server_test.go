@@ -12,24 +12,19 @@ import (
 	"github.com/shutx-net/spring-security-documentation-mcp-server/internal/store"
 )
 
-func openMemStore(t *testing.T) *store.SQLiteStore {
+func newTestStore(t *testing.T) *store.MemoryStore {
 	t.Helper()
-	st, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	t.Cleanup(func() { st.Close() })
-	return st
+	return store.NewMemoryStore()
 }
 
-func seedChunks(t *testing.T, st *store.SQLiteStore, chunks []model.DocChunk) {
+func seedChunks(t *testing.T, st store.Store, chunks []model.DocChunk) {
 	t.Helper()
 	if err := st.UpsertChunks(context.Background(), chunks); err != nil {
 		t.Fatalf("UpsertChunks: %v", err)
 	}
 }
 
-func connectSession(t *testing.T, st *store.SQLiteStore) *gomcp.ClientSession {
+func connectSession(t *testing.T, st store.Store) *gomcp.ClientSession {
 	t.Helper()
 	serverTransport, clientTransport := gomcp.NewInMemoryTransports()
 	s := mcpserver.BuildServer(st)
@@ -45,8 +40,7 @@ func connectSession(t *testing.T, st *store.SQLiteStore) *gomcp.ClientSession {
 }
 
 func TestServerTools(t *testing.T) {
-	st := openMemStore(t)
-	session := connectSession(t, st)
+	session := connectSession(t, newTestStore(t))
 
 	result, err := session.ListTools(context.Background(), nil)
 	if err != nil {
@@ -70,23 +64,22 @@ func TestServerTools(t *testing.T) {
 }
 
 func TestSearchTool(t *testing.T) {
-	st := openMemStore(t)
+	st := newTestStore(t)
 	seedChunks(t, st, []model.DocChunk{
 		{
 			ID: "id1", Project: "spring-security", Ref: "6.5.x", CommitSha: "abc",
-			BuiltAt: time.Now(), SourceType: model.SourceTypeOfficialZIP,
-			SourcePath: "servlet/authentication.html",
+			BuiltAt: time.Now(), SourceType: model.SourceTypeAntoraBuild,
+			SourcePath:   "servlet/authentication.html",
 			CanonicalURL: "https://docs.spring.io/spring-security/reference/servlet/authentication.html",
-			Title: "Form Login", HeadingPath: []string{"Authentication", "Form Login"},
-			Area: model.AreaServlet,
-			ContentHtml:     "<p>Configure SecurityFilterChain.</p>",
+			Title:        "Form Login", HeadingPath: []string{"Authentication", "Form Login"},
+			Area:        model.AreaServlet,
+			ContentHtml: "<p>Configure SecurityFilterChain.</p>",
 			ContentText: "Form Login Configure SecurityFilterChain.",
-			IndexedAt: time.Now(),
+			IndexedAt:   time.Now(),
 		},
 	})
 
 	session := connectSession(t, st)
-
 	result, err := session.CallTool(context.Background(), &gomcp.CallToolParams{
 		Name:      "search_spring_security_docs",
 		Arguments: map[string]any{"query": "SecurityFilterChain"},
@@ -103,9 +96,7 @@ func TestSearchTool(t *testing.T) {
 }
 
 func TestSearchToolEmptyQuery(t *testing.T) {
-	st := openMemStore(t)
-	session := connectSession(t, st)
-
+	session := connectSession(t, newTestStore(t))
 	result, err := session.CallTool(context.Background(), &gomcp.CallToolParams{
 		Name:      "search_spring_security_docs",
 		Arguments: map[string]any{"query": ""},
@@ -119,9 +110,7 @@ func TestSearchToolEmptyQuery(t *testing.T) {
 }
 
 func TestGetToolNotFound(t *testing.T) {
-	st := openMemStore(t)
-	session := connectSession(t, st)
-
+	session := connectSession(t, newTestStore(t))
 	result, err := session.CallTool(context.Background(), &gomcp.CallToolParams{
 		Name:      "get_spring_security_doc",
 		Arguments: map[string]any{"id": "nonexistent"},
@@ -135,9 +124,7 @@ func TestGetToolNotFound(t *testing.T) {
 }
 
 func TestListDocSetsTool(t *testing.T) {
-	st := openMemStore(t)
-	session := connectSession(t, st)
-
+	session := connectSession(t, newTestStore(t))
 	result, err := session.CallTool(context.Background(), &gomcp.CallToolParams{
 		Name:      "list_spring_security_doc_sets",
 		Arguments: map[string]any{},
@@ -151,9 +138,7 @@ func TestListDocSetsTool(t *testing.T) {
 }
 
 func TestStatusTool(t *testing.T) {
-	st := openMemStore(t)
-	session := connectSession(t, st)
-
+	session := connectSession(t, newTestStore(t))
 	result, err := session.CallTool(context.Background(), &gomcp.CallToolParams{
 		Name:      "get_spring_security_docs_status",
 		Arguments: map[string]any{},

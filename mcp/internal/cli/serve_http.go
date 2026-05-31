@@ -5,34 +5,26 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 
 	gomcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 	"github.com/shutx-net/spring-security-documentation-mcp-server/internal/mcpserver"
-	"github.com/shutx-net/spring-security-documentation-mcp-server/internal/store"
 )
 
 func newServeHTTPCmd() *cobra.Command {
-	var (
-		port   int
-		dbPath string
-	)
+	var port int
 
 	cmd := &cobra.Command{
 		Use:   "serve-http",
 		Short: "Start MCP server (Streamable HTTP transport)",
+		Long: `Start the MCP server over Streamable HTTP.
+
+Reads from CHUNKS_TABLE for the DynamoDB chunks table name.
+Standard AWS credential/region environment variables are also respected.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if dbPath == "" {
-				dbPath = defaultDBPath()
-			}
-			if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-				return fmt.Errorf("create db dir: %w", err)
-			}
-			st, err := store.Open(dbPath)
+			st, err := openAWSStore(cmd.Context())
 			if err != nil {
-				return fmt.Errorf("open store at %s: %w", dbPath, err)
+				return err
 			}
 			defer st.Close()
 
@@ -54,6 +46,5 @@ func newServeHTTPCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&port, "port", 8080, "HTTP port to listen on")
-	cmd.Flags().StringVar(&dbPath, "db", "", "path to SQLite database")
 	return cmd
 }

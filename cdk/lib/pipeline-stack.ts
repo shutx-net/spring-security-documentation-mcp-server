@@ -69,7 +69,7 @@ export class PipelineStack extends Stack {
                 ],
                 resources: [
                     props.vectorBucket.attrVectorBucketArn,
-                    `${props.vectorBucket.attrVectorBucketArn}/index/${props.vectorIndex.ref}`,
+                    props.vectorIndex.ref,
                 ],
             }),
         );
