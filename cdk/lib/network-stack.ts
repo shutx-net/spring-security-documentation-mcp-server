@@ -58,7 +58,7 @@ export class NetworkStack extends Stack {
 
     this.albSecurityGroup = new ec2.SecurityGroup(this, 'AlbSg', {
       vpc: this.vpc,
-      description: 'ALB — accepts HTTPS from Cloudflare IP ranges only',
+      description: 'ALB - accepts HTTPS from Cloudflare IP ranges only',
       allowAllOutbound: false,
     });
     this.albSecurityGroup.addIngressRule(
@@ -74,7 +74,7 @@ export class NetworkStack extends Stack {
 
     this.ecsSecurityGroup = new ec2.SecurityGroup(this, 'EcsSg', {
       vpc: this.vpc,
-      description: 'ECS Fargate tasks — accepts traffic from ALB SG only',
+      description: 'ECS Fargate tasks - accepts traffic from ALB SG only',
       allowAllOutbound: true,
     });
     this.ecsSecurityGroup.addIngressRule(
@@ -90,7 +90,7 @@ export class NetworkStack extends Stack {
 
     this.endpointSecurityGroup = new ec2.SecurityGroup(this, 'VpcEndpointSg', {
       vpc: this.vpc,
-      description: 'Interface VPC endpoints — accepts HTTPS from ECS SG',
+      description: 'Interface VPC endpoints - accepts HTTPS from ECS SG',
       allowAllOutbound: false,
     });
     this.endpointSecurityGroup.addIngressRule(
