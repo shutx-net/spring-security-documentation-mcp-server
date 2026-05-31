@@ -164,7 +164,7 @@ def embed_chunks(bedrock_client, chunks: list[dict], model_id: str) -> list[list
 # S3 Vectors
 # ---------------------------------------------------------------------------
 
-def put_vectors(s3vectors_client, vector_bucket: str, vector_index: str,
+def put_vectors(s3vectors_client, vector_index_arn: str,
                 chunks: list[dict], embeddings: list[list[float]]) -> None:
     vectors = [
         {
@@ -181,8 +181,7 @@ def put_vectors(s3vectors_client, vector_bucket: str, vector_index: str,
     for i in range(0, len(vectors), VECTOR_BATCH_SIZE):
         batch = vectors[i: i + VECTOR_BATCH_SIZE]
         s3vectors_client.put_vectors(
-            vectorBucketName=vector_bucket,
-            indexName=vector_index,
+            indexArn=vector_index,
             vectors=batch,
         )
         print(f"  PutVectors: {i + len(batch)}/{len(vectors)}")
@@ -309,7 +308,7 @@ def main() -> None:
 
     # 3. S3 Vectors
     print(f"[{args.ref}] Writing vectors ...")
-    put_vectors(clients["s3vectors"], vector_bucket, vector_index, all_chunks, embeddings)
+    put_vectors(clients["s3vectors"], vector_index, all_chunks, embeddings)
 
     # 4. DynamoDB
     print(f"[{args.ref}] Writing DynamoDB chunks ...")
