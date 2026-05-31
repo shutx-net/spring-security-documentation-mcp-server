@@ -74,7 +74,7 @@ export class ServiceStack extends Stack {
         actions: ['s3vectors:QueryVectors', 's3vectors:GetVectors'],
         resources: [
           props.vectorBucket.attrVectorBucketArn,
-          `${props.vectorBucket.attrVectorBucketArn}/index/${props.vectorIndex.ref}`,
+          props.vectorIndex.ref,
         ],
       }),
     );
