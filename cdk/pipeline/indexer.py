@@ -181,7 +181,7 @@ def put_vectors(s3vectors_client, vector_index_arn: str,
     for i in range(0, len(vectors), VECTOR_BATCH_SIZE):
         batch = vectors[i: i + VECTOR_BATCH_SIZE]
         s3vectors_client.put_vectors(
-            indexArn=vector_index,
+            indexArn=vector_index_arn,
             vectors=batch,
         )
         print(f"  PutVectors: {i + len(batch)}/{len(vectors)}")
@@ -279,7 +279,6 @@ def main() -> None:
     args = _parse_args()
 
     content_bucket = os.environ["CONTENT_BUCKET"]
-    vector_bucket  = os.environ["VECTOR_BUCKET"]
     vector_index   = os.environ["VECTOR_INDEX"]
     chunks_table   = os.environ["CHUNKS_TABLE"]
     keywords_table = os.environ["KEYWORDS_TABLE"]
