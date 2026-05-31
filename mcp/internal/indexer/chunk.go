@@ -8,6 +8,12 @@ import (
 	"github.com/shutx-net/spring-security-documentation-mcp-server/internal/model"
 )
 
+// canonicalURLFor converts a relative site path to the Spring Security docs canonical URL.
+func canonicalURLFor(ref, sourcePath string) string {
+	path := strings.TrimSuffix(sourcePath, ".html")
+	return "https://docs.spring.io/spring-security/reference/" + path + ".html"
+}
+
 // chunkID generates a stable chunk ID from its identifying fields.
 func chunkID(ref, commitSha, canonicalURL string, headingPath []string) string {
 	h := sha256.Sum256([]byte(ref + "\x00" + commitSha + "\x00" + canonicalURL + "\x00" + strings.Join(headingPath, "/")))
