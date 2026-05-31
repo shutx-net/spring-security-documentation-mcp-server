@@ -31,6 +31,11 @@ export interface AppConfig {
   };
 
   githubTokenSecretName?: string;
+
+  github?: {
+    org: string;
+    repo: string;
+  };
 }
 
 export function loadConfig(app: App): AppConfig {
@@ -59,5 +64,6 @@ export function loadConfig(app: App): AppConfig {
       ? { domainName: domainName!, certificateArn: certificateArn! }
       : undefined,
     githubTokenSecretName: ctx<string | undefined>('githubTokenSecretName', undefined) ?? undefined,
+    github: ctx<AppConfig['github']>('github', undefined),
   };
 }

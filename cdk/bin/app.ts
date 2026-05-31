@@ -6,6 +6,7 @@ import { StorageStack } from '../lib/storage-stack';
 import { NetworkStack } from '../lib/network-stack';
 import { ServiceStack } from '../lib/service-stack';
 import { PipelineStack } from '../lib/pipeline-stack';
+import { CicdStack } from '../lib/cicd-stack';
 
 const app = new cdk.App();
 const config = loadConfig(app);
@@ -33,6 +34,16 @@ if (config.domain) {
   });
   service.addDependency(network);
   service.addDependency(storage);
+
+  if (config.github) {
+    const cicd = new CicdStack(app, `${prefix}-cicd`, {
+      env,
+      githubOrg: config.github.org,
+      githubRepo: config.github.repo,
+      ecrRepository: service.ecrRepository,
+    });
+    cicd.addDependency(service);
+  }
 }
 
 const pipeline = new PipelineStack(app, `${prefix}-pipeline`, {
