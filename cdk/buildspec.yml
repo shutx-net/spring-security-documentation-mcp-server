@@ -22,7 +22,7 @@ phases:
     on-failure: ABORT
     commands:
       - |
-        set -euo pipefail
+        set -eu
         for REF in $TARGET_REFS; do
           echo "===== [$(date -u '+%Y-%m-%dT%H:%M:%SZ')] Processing ref: $REF ====="
 
