@@ -29,6 +29,8 @@ export interface AppConfig {
     domainName: string;
     certificateArn: string;
   };
+
+  githubTokenSecretName?: string;
 }
 
 export function loadConfig(app: App): AppConfig {
@@ -56,5 +58,6 @@ export function loadConfig(app: App): AppConfig {
     domain: allDomainSet
       ? { domainName: domainName!, certificateArn: certificateArn! }
       : undefined,
+    githubTokenSecretName: ctx<string | undefined>('githubTokenSecretName', undefined) ?? undefined,
   };
 }

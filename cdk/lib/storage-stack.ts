@@ -47,14 +47,17 @@ export class StorageStack extends Stack {
       ],
     });
 
+    const vectorBucketName = `${config.appName}-vectors`;
+
     this.vectorBucket = new s3vectors.CfnVectorBucket(this, 'VectorBucket', {
+      vectorBucketName,
       encryptionConfiguration: {
         sseType: 'AES256',
       },
     });
 
     this.vectorIndex = new s3vectors.CfnIndex(this, 'VectorIndex', {
-      vectorBucketName: this.vectorBucket.ref,
+      vectorBucketName,
       dataType: 'float32',
       dimension: config.embeddingDimension,
       distanceMetric: 'cosine',
@@ -62,6 +65,7 @@ export class StorageStack extends Stack {
         nonFilterableMetadataKeys: ['contentPreview', 'sourcePath'],
       },
     });
+    this.vectorIndex.addDependency(this.vectorBucket);
 
     const chunks = new dynamodb.Table(this, 'DocChunksTable', {
       partitionKey: { name: 'chunkId', type: dynamodb.AttributeType.STRING },

@@ -19,19 +19,21 @@ const prefix = config.appName;
 
 const storage = new StorageStack(app, `${prefix}-storage`, { env, config });
 const network = new NetworkStack(app, `${prefix}-network`, { env, config });
-const service = new ServiceStack(app, `${prefix}-service`, {
-  env,
-  config,
-  vpc: network.vpc,
-  albSecurityGroup: network.albSecurityGroup,
-  ecsSecurityGroup: network.ecsSecurityGroup,
-  contentBucket: storage.contentBucket,
-  vectorBucket: storage.vectorBucket,
-  vectorIndex: storage.vectorIndex,
-  tables: storage.tables,
-});
-service.addDependency(network);
-service.addDependency(storage);
+if (config.domain) {
+  const service = new ServiceStack(app, `${prefix}-service`, {
+    env,
+    config,
+    vpc: network.vpc,
+    albSecurityGroup: network.albSecurityGroup,
+    ecsSecurityGroup: network.ecsSecurityGroup,
+    contentBucket: storage.contentBucket,
+    vectorBucket: storage.vectorBucket,
+    vectorIndex: storage.vectorIndex,
+    tables: storage.tables,
+  });
+  service.addDependency(network);
+  service.addDependency(storage);
+}
 
 const pipeline = new PipelineStack(app, `${prefix}-pipeline`, {
   env,
