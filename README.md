@@ -294,11 +294,11 @@ Consider running a secret scanner before public release.
 
 ## License
 
-A license has not been documented yet.
+This project is licensed under the Apache License 2.0.
 
-Before making this repository public, add a `LICENSE` file.
+See [LICENSE](./LICENSE) for the full license text.
 
-Apache License 2.0 may be a reasonable choice for this project, but the selected license should be confirmed before public release.
+See [NOTICE](./NOTICE) for attribution, unofficial project notice, and clarification about the scope of this project's license.
 
 ## Disclaimer
 
