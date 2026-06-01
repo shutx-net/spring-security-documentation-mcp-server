@@ -1,5 +1,12 @@
 # Unofficial MCP Server for Spring Security Documentation
 
+<p align="center">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache-2.0"></a>
+  <img src="https://img.shields.io/badge/status-experimental-orange" alt="Status: Experimental">
+  <img src="https://img.shields.io/badge/MCP-Streamable%20HTTP-purple" alt="MCP: Streamable HTTP">
+  <img src="https://img.shields.io/badge/Go-1.26.3-00ADD8?logo=go&logoColor=white" alt="Go 1.26.3">
+</p>
+
 > [!IMPORTANT]
 > This is an unofficial community project.
 > It is not affiliated with, endorsed by, sponsored by, or maintained by the Spring Security team, VMware, Broadcom, or the Spring project.
