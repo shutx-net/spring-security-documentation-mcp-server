@@ -201,7 +201,8 @@ def _collect_stale_chunk_ids(table, ref: str, current_commit_sha: str) -> list[s
     """Scan the chunks table and return chunkIds for same ref but different commitSha."""
     stale: list[str] = []
     kwargs: dict = {
-        "FilterExpression": "ref = :ref AND commitSha <> :sha",
+        "FilterExpression": "#ref = :ref AND commitSha <> :sha",
+        "ExpressionAttributeNames": {"#ref": "ref"},
         "ExpressionAttributeValues": {":ref": ref, ":sha": current_commit_sha},
         "ProjectionExpression": "chunkId",
     }
@@ -242,7 +243,10 @@ def cleanup_stale_data(
 
     # 3. Delete stale keyword entries (scan full table; keywords has no commitSha attr).
     kw_deleted = 0
-    kw_kwargs: dict = {"ProjectionExpression": "keyword, refAreaChunkId, chunkId"}
+    kw_kwargs: dict = {
+        "ProjectionExpression": "#kw, refAreaChunkId, chunkId",
+        "ExpressionAttributeNames": {"#kw": "keyword"},
+    }
     while True:
         resp = keywords_table.scan(**kw_kwargs)
         with keywords_table.batch_writer() as bw:
