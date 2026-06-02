@@ -11,13 +11,14 @@ export interface CicdStackProps extends StackProps {
   readonly githubOrg: string;
   readonly githubRepo: string;
   readonly ecrRepository: ecr.IRepository;
+  readonly ecsServiceArn: string;
 }
 
 export class CicdStack extends Stack {
   constructor(scope: Construct, id: string, props: CicdStackProps) {
     super(scope, id, props);
 
-    const { githubOrg, githubRepo, ecrRepository } = props;
+    const { githubOrg, githubRepo, ecrRepository, ecsServiceArn } = props;
 
     // OIDC provider for GitHub Actions.
     // OidcProviderNative uses the native AWS::IAM::OIDCProvider CloudFormation resource
@@ -68,6 +69,12 @@ export class CicdStack extends Stack {
     role.addToPolicy(new iam.PolicyStatement({
       actions: ['ecr:GetAuthorizationToken'],
       resources: ['*'],
+    }));
+
+    // ECS force-new-deployment after ECR push.
+    role.addToPolicy(new iam.PolicyStatement({
+      actions: ['ecs:UpdateService'],
+      resources: [ecsServiceArn],
     }));
 
     new CfnOutput(this, 'GitHubActionsRoleArn', {
