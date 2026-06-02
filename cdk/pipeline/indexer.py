@@ -243,7 +243,10 @@ def cleanup_stale_data(
 
     # 3. Delete stale keyword entries (scan full table; keywords has no commitSha attr).
     kw_deleted = 0
-    kw_kwargs: dict = {"ProjectionExpression": "keyword, refAreaChunkId, chunkId"}
+    kw_kwargs: dict = {
+        "ProjectionExpression": "#kw, refAreaChunkId, chunkId",
+        "ExpressionAttributeNames": {"#kw": "keyword"},
+    }
     while True:
         resp = keywords_table.scan(**kw_kwargs)
         with keywords_table.batch_writer() as bw:
