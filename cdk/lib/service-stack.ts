@@ -32,6 +32,7 @@ export interface ServiceStackProps extends StackProps {
 export class ServiceStack extends Stack {
   public readonly ecrRepository: ecr.IRepository;
   public readonly loadBalancer: elbv2.IApplicationLoadBalancer;
+  public readonly ecsServiceArn: string;
 
   constructor(scope: Construct, id: string, props: ServiceStackProps) {
     super(scope, id, props);
@@ -187,6 +188,10 @@ export class ServiceStack extends Stack {
       scaleOutCooldown: Duration.seconds(60),
     });
 
+    this.ecsServiceArn = service.serviceArn;
+
+    new CfnOutput(this, 'EcsClusterName', { value: cluster.clusterName });
+    new CfnOutput(this, 'EcsServiceName', { value: service.serviceName });
     new CfnOutput(this, 'EcrRepositoryUri', { value: this.ecrRepository.repositoryUri });
     new CfnOutput(this, 'AlbDnsName', {
       value: alb.loadBalancerDnsName,

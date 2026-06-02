@@ -41,6 +41,7 @@ if (config.domain) {
       githubOrg: config.github.org,
       githubRepo: config.github.repo,
       ecrRepository: service.ecrRepository,
+      ecsServiceArn: service.ecsServiceArn,
     });
     cicd.addDependency(service);
   }
