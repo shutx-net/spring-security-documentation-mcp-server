@@ -50,8 +50,19 @@ export class CicdStack extends Stack {
       description: 'Assumed by GitHub Actions to push images to ECR',
     });
 
-    // grantPush adds the 7 ECR repository-level actions needed for docker push.
-    ecrRepository.grantPush(role);
+    // ECR push permissions (docker buildx requires BatchGetImage for manifest HEAD checks).
+    role.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        'ecr:BatchCheckLayerAvailability',
+        'ecr:BatchGetImage',
+        'ecr:CompleteLayerUpload',
+        'ecr:GetDownloadUrlForLayer',
+        'ecr:InitiateLayerUpload',
+        'ecr:PutImage',
+        'ecr:UploadLayerPart',
+      ],
+      resources: [ecrRepository.repositoryArn],
+    }));
 
     // GetAuthorizationToken operates on * (not a specific repository).
     role.addToPolicy(new iam.PolicyStatement({
