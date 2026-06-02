@@ -84,11 +84,8 @@ def _detect_area(html_path: str) -> str:
     return "other"
 
 
-def _canonical_url(soup: BeautifulSoup, html_path: str) -> str:
-    tag = soup.find("link", rel="canonical")
-    if tag and tag.get("href"):
-        return tag["href"]
-    rel = Path(html_path).relative_to(Path(html_path).anchor)
+def _canonical_url(html_path: str, site_dir: str) -> str:
+    rel = Path(html_path).relative_to(site_dir)
     return f"https://docs.spring.io/spring-security/reference/{rel}"
 
 
@@ -107,7 +104,7 @@ def parse_html(html_path: str, site_dir: str, ref: str, commit_sha: str, built_a
         soup = BeautifulSoup(f, "lxml")
 
     area = _detect_area(html_path)
-    canonical_url = _canonical_url(soup, html_path)
+    canonical_url = _canonical_url(html_path, site_dir)
 
     # Remove nav/header/footer noise before extracting content
     for tag in soup.select("nav, header, footer, .nav, .toc, script, style"):
