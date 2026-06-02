@@ -201,7 +201,8 @@ def _collect_stale_chunk_ids(table, ref: str, current_commit_sha: str) -> list[s
     """Scan the chunks table and return chunkIds for same ref but different commitSha."""
     stale: list[str] = []
     kwargs: dict = {
-        "FilterExpression": "ref = :ref AND commitSha <> :sha",
+        "FilterExpression": "#ref = :ref AND commitSha <> :sha",
+        "ExpressionAttributeNames": {"#ref": "ref"},
         "ExpressionAttributeValues": {":ref": ref, ":sha": current_commit_sha},
         "ProjectionExpression": "chunkId",
     }
