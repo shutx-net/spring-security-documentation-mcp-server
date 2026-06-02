@@ -1,0 +1,63 @@
+Unofficial MCP Server for Spring Security Documentation
+
+Copyright 2026 shutx-net
+
+This project is an unofficial community project.
+
+It is not affiliated with, endorsed by, sponsored by, or maintained by
+the Spring Security team, VMware, Broadcom, or the Spring project.
+
+This project uses the name "Spring Security" only to identify the
+upstream project and documentation that this unofficial tool is designed
+to search and reference.
+
+Project license scope
+---------------------
+
+The Apache License 2.0 in this repository applies to this project's own
+source code, documentation, configuration, and other original materials,
+unless otherwise noted.
+
+It does not relicense Spring Security source code, Spring Security
+documentation, or any other upstream third-party material.
+
+Use of Spring Security source code and documentation
+---------------------------------------------------
+
+Spring Security is an upstream project maintained by its respective
+owners and contributors. This project does not claim ownership of the
+Spring Security source code or documentation.
+
+This project may fetch, build, parse, or index content from the official
+Spring Security repository and documentation for the limited purpose of
+documentation-oriented search and retrieval through MCP tools.
+
+The Spring Security repository is treated as an upstream source for
+documentation indexing, not as code owned or maintained by this project.
+
+If documentation text is extracted into an index, it should be used to
+support search, retrieval, citation, and navigation back to the official
+documentation.
+
+Where possible, returned or indexed content should preserve attribution
+metadata such as:
+
+- upstream repository URL
+- official documentation URL
+- documentation version or branch
+- commit SHA
+- build timestamp
+- heading path or page title
+
+For authoritative information, users should refer to the official Spring
+Security documentation and the official Spring Security source repository.
+
+Naming and attribution
+----------------------
+
+This project should not present itself as an official Spring project or
+imply endorsement by the Spring Security team, VMware, Broadcom, or the
+Spring project.
+
+If any naming, wording, attribution, or disclaimer in this project is
+inappropriate, please open an issue so it can be corrected.
