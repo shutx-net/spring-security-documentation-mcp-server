@@ -197,6 +197,29 @@ def write_chunks_dynamo(dynamo_resource, table_name: str, chunks: list[dict]) ->
             bw.put_item(Item=chunk)
 
 
+def delete_stale_chunks_dynamo(dynamo_resource, table_name: str, ref: str, current_commit_sha: str) -> int:
+    """Delete chunks for ref whose commitSha differs from current_commit_sha."""
+    table = dynamo_resource.Table(table_name)
+    deleted = 0
+    scan_kwargs = {
+        "FilterExpression": "ref = :ref AND commitSha <> :sha",
+        "ExpressionAttributeValues": {":ref": ref, ":sha": current_commit_sha},
+        "ProjectionExpression": "chunkId",
+    }
+    while True:
+        resp = table.scan(**scan_kwargs)
+        items = resp.get("Items", [])
+        with table.batch_writer() as bw:
+            for item in items:
+                bw.delete_item(Key={"chunkId": item["chunkId"]})
+        deleted += len(items)
+        last = resp.get("LastEvaluatedKey")
+        if not last:
+            break
+        scan_kwargs["ExclusiveStartKey"] = last
+    return deleted
+
+
 def write_keywords_dynamo(dynamo_resource, table_name: str, chunks: list[dict]) -> None:
     table = dynamo_resource.Table(table_name)
     with table.batch_writer() as bw:
@@ -313,6 +336,9 @@ def main() -> None:
     write_chunks_dynamo(clients["dynamodb"], chunks_table, all_chunks)
     print(f"[{args.ref}] Writing DynamoDB keywords ...")
     write_keywords_dynamo(clients["dynamodb"], keywords_table, all_chunks)
+    print(f"[{args.ref}] Removing stale chunks ...")
+    removed = delete_stale_chunks_dynamo(clients["dynamodb"], chunks_table, args.ref, args.commit_sha)
+    print(f"[{args.ref}] Removed {removed} stale chunks")
 
     # 5. S3 (latest.json written last)
     print(f"[{args.ref}] Uploading to S3 ...")
