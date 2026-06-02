@@ -4,11 +4,65 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	gomcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/shutx-net/spring-security-documentation-mcp-server/internal/model"
 	"github.com/shutx-net/spring-security-documentation-mcp-server/internal/store"
 )
+
+const (
+	searchSnippetMaxChars = 500
+	chunkContentMaxChars  = 20_000
+)
+
+// chunkSnippet is a reduced view of DocChunk used in search results.
+// ContentHtml is omitted; ContentText is truncated to searchSnippetMaxChars.
+type chunkSnippet struct {
+	ID           string       `json:"id"`
+	Ref          string       `json:"ref"`
+	CommitSha    string       `json:"commit_sha"`
+	BuiltAt      time.Time    `json:"built_at"`
+	SourcePath   string       `json:"source_path"`
+	CanonicalURL string       `json:"canonical_url"`
+	Title        string       `json:"title"`
+	HeadingPath  []string     `json:"heading_path"`
+	Area         model.Area   `json:"area"`
+	ContentText  string       `json:"content_text"`
+	Truncated    bool         `json:"truncated,omitempty"`
+}
+
+func toSnippet(c model.DocChunk) chunkSnippet {
+	text := c.ContentText
+	truncated := false
+	if len([]rune(text)) > searchSnippetMaxChars {
+		text = string([]rune(text)[:searchSnippetMaxChars]) + "..."
+		truncated = true
+	}
+	return chunkSnippet{
+		ID:          c.ID,
+		Ref:         c.Ref,
+		CommitSha:   c.CommitSha,
+		BuiltAt:     c.BuiltAt,
+		SourcePath:  c.SourcePath,
+		CanonicalURL: c.CanonicalURL,
+		Title:       c.Title,
+		HeadingPath: c.HeadingPath,
+		Area:        c.Area,
+		ContentText: text,
+		Truncated:   truncated,
+	}
+}
+
+func capChunk(c model.DocChunk) model.DocChunk {
+	if r := []rune(c.ContentText); len(r) > chunkContentMaxChars {
+		c.ContentText = string(r[:chunkContentMaxChars]) + "..."
+	}
+	if r := []rune(c.ContentHtml); len(r) > chunkContentMaxChars {
+		c.ContentHtml = string(r[:chunkContentMaxChars]) + "..."
+	}
+	return c
+}
 
 // --- search_spring_security_docs ---
 
@@ -16,7 +70,7 @@ type searchArgs struct {
 	Query string `json:"query" jsonschema:"Search query (keyword, concept, or Java identifier such as SecurityFilterChain)"`
 	Ref   string `json:"ref,omitempty"   jsonschema:"Spring Security version to search (e.g. 6.5.x or 7.0.x)"`
 	Area  string `json:"area,omitempty"  jsonschema:"Documentation area: servlet, reactive, oauth2, saml2, method-security, testing, architecture, authorization, or authentication"`
-	Limit int    `json:"limit,omitempty" jsonschema:"Maximum number of results (default 10, max 50)"`
+	Limit int    `json:"limit,omitempty" jsonschema:"Maximum number of results (default 10, max 20)"`
 }
 
 func newSearchHandler(st store.Store) func(context.Context, *gomcp.CallToolRequest, searchArgs) (*gomcp.CallToolResult, any, error) {
@@ -25,7 +79,7 @@ func newSearchHandler(st store.Store) func(context.Context, *gomcp.CallToolReque
 			return nil, nil, fmt.Errorf("query is required")
 		}
 		limit := args.Limit
-		if limit <= 0 || limit > 50 {
+		if limit <= 0 || limit > 20 {
 			limit = 10
 		}
 		result, err := st.Search(ctx, model.SearchParams{
@@ -37,7 +91,11 @@ func newSearchHandler(st store.Store) func(context.Context, *gomcp.CallToolReque
 		if err != nil {
 			return nil, nil, fmt.Errorf("search failed: %w", err)
 		}
-		return textResult(result)
+		snippets := make([]chunkSnippet, len(result.Chunks))
+		for i, c := range result.Chunks {
+			snippets[i] = toSnippet(c)
+		}
+		return textResult(snippets)
 	}
 }
 
@@ -56,7 +114,7 @@ func newGetHandler(st store.Store) func(context.Context, *gomcp.CallToolRequest,
 		if err != nil {
 			return nil, nil, err
 		}
-		return textResult(chunk)
+		return textResult(capChunk(chunk))
 	}
 }
 

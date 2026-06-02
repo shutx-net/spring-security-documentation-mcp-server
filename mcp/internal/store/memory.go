@@ -41,7 +41,7 @@ func (s *MemoryStore) GetChunk(_ context.Context, id string) (model.DocChunk, er
 
 func (s *MemoryStore) Search(_ context.Context, params model.SearchParams) (model.SearchResult, error) {
 	limit := params.Limit
-	if limit <= 0 || limit > 50 {
+	if limit <= 0 || limit > 20 {
 		limit = 10
 	}
 	q := strings.ToLower(params.Query)

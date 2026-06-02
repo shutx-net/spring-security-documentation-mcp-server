@@ -126,7 +126,7 @@ func (s *AWSStore) GetChunk(ctx context.Context, id string) (model.DocChunk, err
 // Phase 2 will replace this with Bedrock Embeddings + S3 Vectors.
 func (s *AWSStore) Search(ctx context.Context, params model.SearchParams) (model.SearchResult, error) {
 	limit := params.Limit
-	if limit <= 0 || limit > 50 {
+	if limit <= 0 || limit > 20 {
 		limit = 10
 	}
 
