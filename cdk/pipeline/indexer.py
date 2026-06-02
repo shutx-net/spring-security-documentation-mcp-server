@@ -197,6 +197,98 @@ def write_chunks_dynamo(dynamo_resource, table_name: str, chunks: list[dict]) ->
             bw.put_item(Item=chunk)
 
 
+def _collect_stale_chunk_ids(table, ref: str, current_commit_sha: str) -> list[str]:
+    """Scan the chunks table and return chunkIds for same ref but different commitSha."""
+    stale: list[str] = []
+    kwargs: dict = {
+        "FilterExpression": "ref = :ref AND commitSha <> :sha",
+        "ExpressionAttributeValues": {":ref": ref, ":sha": current_commit_sha},
+        "ProjectionExpression": "chunkId",
+    }
+    while True:
+        resp = table.scan(**kwargs)
+        stale.extend(item["chunkId"] for item in resp.get("Items", []))
+        last = resp.get("LastEvaluatedKey")
+        if not last:
+            break
+        kwargs["ExclusiveStartKey"] = last
+    return stale
+
+
+def cleanup_stale_data(
+    dynamo_resource, s3_client, s3vectors_client,
+    chunks_table_name: str, keywords_table_name: str,
+    vector_index_arn: str, s3_bucket: str,
+    ref: str, commit_sha: str,
+) -> dict:
+    """Remove stale data (same ref, old commitSha) from all stores.
+
+    Returns counts of deleted items per store.
+    """
+    chunks_table   = dynamo_resource.Table(chunks_table_name)
+    keywords_table = dynamo_resource.Table(keywords_table_name)
+
+    # 1. Collect stale chunkIds once — reused by all stores.
+    stale_ids = _collect_stale_chunk_ids(chunks_table, ref, commit_sha)
+    if not stale_ids:
+        return {"chunks": 0, "keywords": 0, "vectors": 0, "s3_objects": 0}
+
+    stale_set = set(stale_ids)
+
+    # 2. Delete stale chunks from DynamoDB.
+    with chunks_table.batch_writer() as bw:
+        for cid in stale_ids:
+            bw.delete_item(Key={"chunkId": cid})
+
+    # 3. Delete stale keyword entries (scan full table; keywords has no commitSha attr).
+    kw_deleted = 0
+    kw_kwargs: dict = {"ProjectionExpression": "keyword, refAreaChunkId, chunkId"}
+    while True:
+        resp = keywords_table.scan(**kw_kwargs)
+        with keywords_table.batch_writer() as bw:
+            for item in resp.get("Items", []):
+                if item.get("chunkId") in stale_set:
+                    bw.delete_item(Key={
+                        "keyword":        item["keyword"],
+                        "refAreaChunkId": item["refAreaChunkId"],
+                    })
+                    kw_deleted += 1
+        last = resp.get("LastEvaluatedKey")
+        if not last:
+            break
+        kw_kwargs["ExclusiveStartKey"] = last
+
+    # 4. Delete stale vectors.
+    for i in range(0, len(stale_ids), VECTOR_BATCH_SIZE):
+        s3vectors_client.delete_vectors(
+            indexArn=vector_index_arn,
+            keys=stale_ids[i: i + VECTOR_BATCH_SIZE],
+        )
+
+    # 5. Delete stale S3 chunk files (old commitSha prefixes under chunks/{ref}/).
+    prefix = f"chunks/spring-security/{ref}/"
+    paginator = s3_client.get_paginator("list_objects_v2")
+    s3_keys: list[str] = []
+    for page in paginator.paginate(Bucket=s3_bucket, Prefix=prefix, Delimiter="/"):
+        for cp in page.get("CommonPrefixes", []):
+            sha = cp["Prefix"].rstrip("/").split("/")[-1]
+            if sha != commit_sha:
+                for obj_page in paginator.paginate(Bucket=s3_bucket, Prefix=cp["Prefix"]):
+                    s3_keys.extend(obj["Key"] for obj in obj_page.get("Contents", []))
+    for i in range(0, len(s3_keys), 1000):
+        s3_client.delete_objects(
+            Bucket=s3_bucket,
+            Delete={"Objects": [{"Key": k} for k in s3_keys[i: i + 1000]]},
+        )
+
+    return {
+        "chunks":     len(stale_ids),
+        "keywords":   kw_deleted,
+        "vectors":    len(stale_ids),
+        "s3_objects": len(s3_keys),
+    }
+
+
 def write_keywords_dynamo(dynamo_resource, table_name: str, chunks: list[dict]) -> None:
     table = dynamo_resource.Table(table_name)
     with table.batch_writer() as bw:
@@ -313,6 +405,13 @@ def main() -> None:
     write_chunks_dynamo(clients["dynamodb"], chunks_table, all_chunks)
     print(f"[{args.ref}] Writing DynamoDB keywords ...")
     write_keywords_dynamo(clients["dynamodb"], keywords_table, all_chunks)
+    print(f"[{args.ref}] Removing stale data ...")
+    removed = cleanup_stale_data(
+        clients["dynamodb"], clients["s3"], clients["s3vectors"],
+        chunks_table, keywords_table, vector_index, content_bucket,
+        args.ref, args.commit_sha,
+    )
+    print(f"[{args.ref}] Removed — chunks:{removed['chunks']} keywords:{removed['keywords']} vectors:{removed['vectors']} s3:{removed['s3_objects']}")
 
     # 5. S3 (latest.json written last)
     print(f"[{args.ref}] Uploading to S3 ...")
