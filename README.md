@@ -102,6 +102,14 @@ A successful initialization response includes:
 - `Mcp-Session-Id` response header
 - JSON-RPC response body
 
+## Using with Claude Code
+
+Add this MCP server to Claude Code with the following command:
+
+```bash
+claude mcp add --transport http spring-security-docs https://ss-doc-mcp.shutx.net/mcp
+```
+
 ## Initialize example
 
 ```bash
