@@ -121,6 +121,7 @@ def parse_html(html_path: str, ref: str, commit_sha: str, built_at: str) -> list
     title = h1.get_text(strip=True) if h1 else Path(html_path).stem
     heading_path = [title]
 
+    content_html = str(content_div)
     content_text = content_div.get_text(separator="\n", strip=True)
 
     return [{
@@ -133,6 +134,7 @@ def parse_html(html_path: str, ref: str, commit_sha: str, built_at: str) -> list
         "headingPath": heading_path,
         "canonicalUrl": canonical_url,
         "sourcePath":  html_path,
+        "contentHtml": content_html[:MAX_INPUT_CHARS],
         "contentText": content_text[:MAX_INPUT_CHARS],
     }]
 
