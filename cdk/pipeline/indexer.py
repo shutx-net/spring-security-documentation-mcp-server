@@ -97,7 +97,7 @@ def _chunk_id(ref: str, commit_sha: str, canonical_url: str, heading_path: list[
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def parse_html(html_path: str, ref: str, commit_sha: str, built_at: str) -> list[dict]:
+def parse_html(html_path: str, site_dir: str, ref: str, commit_sha: str, built_at: str) -> list[dict]:
     """Parse one HTML file and return chunks split at h1/h2/h3 boundaries.
 
     TODO: implement proper heading-level splitting.
@@ -133,7 +133,7 @@ def parse_html(html_path: str, ref: str, commit_sha: str, built_at: str) -> list
         "title":       title,
         "headingPath": heading_path,
         "canonicalUrl": canonical_url,
-        "sourcePath":  html_path,
+        "sourcePath":  str(Path(html_path).relative_to(site_dir)),
         "contentHtml": content_html[:MAX_INPUT_CHARS],
         "contentText": content_text[:MAX_INPUT_CHARS],
     }]
@@ -296,7 +296,7 @@ def main() -> None:
 
     all_chunks: list[dict] = []
     for html_path in html_files:
-        all_chunks.extend(parse_html(str(html_path), args.ref, args.commit_sha, built_at))
+        all_chunks.extend(parse_html(str(html_path), args.site_dir, args.ref, args.commit_sha, built_at))
     print(f"[{args.ref}] Generated {len(all_chunks)} chunks")
 
     if not all_chunks:
