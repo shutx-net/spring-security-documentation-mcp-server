@@ -119,6 +119,9 @@ func indexSiteDir(ctx context.Context, ref, commitSha, siteDir string, st store.
 
 		rel, _ := filepath.Rel(siteDir, path)
 		sourcePath := filepath.ToSlash(rel)
+		if strings.HasPrefix(sourcePath, "api/") {
+			return nil
+		}
 		canonicalURL := canonicalURLFor(ref, sourcePath)
 
 		f, err := os.Open(path)

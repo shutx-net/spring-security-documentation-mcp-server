@@ -289,7 +289,7 @@ def main() -> None:
 
     # 1. Parse HTML → chunks
     site_path  = Path(args.site_dir)
-    html_files = sorted(site_path.rglob("*.html"))
+    html_files = sorted(p for p in site_path.rglob("*.html") if not str(p.relative_to(site_path)).startswith("api/"))
     print(f"[{args.ref}] Found {len(html_files)} HTML files")
 
     all_chunks: list[dict] = []
