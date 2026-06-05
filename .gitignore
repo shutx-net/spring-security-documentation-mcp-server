@@ -1,3 +1,4 @@
 .docs
 __pycache__/
 *.pyc
+.benchmark-test-result/

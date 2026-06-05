@@ -5,6 +5,8 @@
   <img src="https://img.shields.io/badge/status-experimental-orange" alt="Status: Experimental">
   <img src="https://img.shields.io/badge/MCP-Streamable%20HTTP-purple" alt="MCP: Streamable HTTP">
   <img src="https://img.shields.io/badge/Go-1.26.3-00ADD8?logo=go&logoColor=white" alt="Go 1.26.3">
+  <a href="https://github.com/shutx-net/spring-security-documentation-mcp-server/actions/workflows/ecr-push.yml"><img src="https://github.com/shutx-net/spring-security-documentation-mcp-server/actions/workflows/ecr-push.yml/badge.svg" alt="Build and Push to ECR"></a>
+  <a href="https://github.com/shutx-net/spring-security-documentation-mcp-server/actions/workflows/indexer-ecr-push.yml"><img src="https://github.com/shutx-net/spring-security-documentation-mcp-server/actions/workflows/indexer-ecr-push.yml/badge.svg" alt="Build and Push Indexer to ECR"></a>
 </p>
 
 > [!IMPORTANT]
@@ -71,19 +73,13 @@ The MCP server is implemented in Go.
 
 The Go module currently uses:
 
-- `github.com/modelcontextprotocol/go-sdk`
-- `github.com/spf13/cobra`
-- `github.com/aws/aws-sdk-go-v2`
-- `github.com/aws/aws-sdk-go-v2/service/dynamodb`
-- `github.com/PuerkitoBio/goquery`
-
-This indicates that the implementation is centered around:
-
-- MCP server functionality
-- CLI command handling
-- AWS integration
-- DynamoDB access
-- HTML parsing or documentation processing
+- `github.com/modelcontextprotocol/go-sdk` — MCP server
+- `github.com/spf13/cobra` — CLI command handling
+- `github.com/aws/aws-sdk-go-v2/service/dynamodb` — documentation chunk storage and keyword search
+- `github.com/aws/aws-sdk-go-v2/service/bedrockruntime` — query embedding via Amazon Titan Embed v2
+- `github.com/aws/aws-sdk-go-v2/service/s3vectors` — semantic vector search
+- `github.com/PuerkitoBio/goquery` — HTML parsing for local indexing
+- `golang.org/x/time` — rate limiting for Bedrock API calls
 
 ## Hosted endpoint
 
@@ -238,23 +234,22 @@ cd mcp
 go mod download
 ```
 
-The exact local run command depends on the current command layout under `mcp/`.
+The executable entry point is at `cmd/spring-security-docs-mcp`. Available subcommands:
 
-If the module has a root `main.go`, use:
+| Command | Description |
+|---|---|
+| `serve` | Start MCP server over stdio transport |
+| `serve-http` | Start MCP server over Streamable HTTP (default port 8080) |
+| `index` | Build a local documentation index from an Antora site directory |
+| `install-index` | Install a pre-built index |
+| `check-updates` | Check if a newer documentation version is available |
+
+To run the HTTP server locally (requires `CHUNKS_TABLE` and AWS credentials):
 
 ```bash
 cd mcp
-go run .
+CHUNKS_TABLE=<table-name> go run ./cmd/spring-security-docs-mcp serve-http
 ```
-
-If the executable entry point is under `cmd/`, use the matching command package, for example:
-
-```bash
-cd mcp
-go run ./cmd/...
-```
-
-Update this section once the executable entry point is finalized.
 
 ## Current limitations
 
@@ -265,9 +260,7 @@ At this stage:
 - The hosted endpoint may change.
 - Available MCP tools may change.
 - Response formats may change.
-- Local execution instructions are not finalized in this README.
 - Public release artifacts are not documented.
-- The exact indexing and deployment process is not documented in this README.
 
 ## Naming and attribution
 

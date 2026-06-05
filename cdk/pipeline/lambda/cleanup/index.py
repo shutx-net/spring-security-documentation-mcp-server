@@ -20,7 +20,7 @@ Environment variables (injected by CDK):
 import os
 
 import boto3
-from boto3.dynamodb.conditions import Attr, Key
+from boto3.dynamodb.conditions import Key
 
 VECTOR_BATCH_SIZE = 500
 
@@ -80,12 +80,14 @@ def _stale_chunk_ids(table, gsi_name: str, ref: str, current_commit_sha: str) ->
     kwargs: dict = {
         "IndexName": gsi_name,
         "KeyConditionExpression": Key("ref").eq(ref),
-        "FilterExpression": Attr("commitSha").ne(current_commit_sha),
-        "ProjectionExpression": "chunkId",
+        "ProjectionExpression": "chunkId, commitSha",
     }
     while True:
         resp = table.query(**kwargs)
-        stale.extend(item["chunkId"] for item in resp.get("Items", []))
+        stale.extend(
+            item["chunkId"] for item in resp.get("Items", [])
+            if item.get("commitSha") != current_commit_sha
+        )
         last = resp.get("LastEvaluatedKey")
         if not last:
             break

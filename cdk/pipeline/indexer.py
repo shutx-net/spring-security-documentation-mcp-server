@@ -90,9 +90,13 @@ def _clients() -> dict:
 # ---------------------------------------------------------------------------
 
 def _detect_area(html_path: str) -> str:
-    for key, val in AREA_PREFIXES.items():
-        if key in html_path:
-            return val
+    # Check path components from deepest (most specific) to shallowest so that
+    # servlet/oauth2/login.html → "oauth2" rather than "servlet".
+    parts = Path(html_path).parts
+    for part in reversed(parts):
+        key = part.removesuffix(".html").lower()
+        if key in AREA_PREFIXES:
+            return AREA_PREFIXES[key]
     return "other"
 
 

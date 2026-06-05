@@ -333,53 +333,5 @@ export class PipelineStack extends Stack {
         new CfnOutput(this, "IndexerClusterName", {
             value: indexerCluster.clusterName,
         });
-
-        // --- Lambda: resolve-commit ---
-        this.resolveCommitFn = new lambda.Function(this, "ResolveCommitFn", {
-            runtime: lambda.Runtime.PYTHON_3_12,
-            handler: "index.handler",
-            code: lambda.Code.fromAsset("pipeline/lambda/resolve_commit"),
-            timeout: Duration.minutes(1),
-            memorySize: 128,
-            description: "Resolve a Spring Security ref to its HEAD commitSha via GitHub API",
-        });
-
-        // --- Lambda: cleanup ---
-        this.cleanupFn = new lambda.Function(this, "CleanupFn", {
-            runtime: lambda.Runtime.PYTHON_3_12,
-            handler: "index.handler",
-            code: lambda.Code.fromAsset("pipeline/lambda/cleanup"),
-            timeout: Duration.minutes(15),
-            memorySize: 256,
-            description: "Remove stale commitSha data from DynamoDB, S3 Vectors, and S3",
-            environment: {
-                CHUNKS_TABLE: props.tables.chunks.tableName,
-                KEYWORDS_TABLE: props.tables.keywords.tableName,
-                CHUNKS_TABLE_GSI_NAME: props.chunksTableGsiName,
-                VECTOR_INDEX: props.vectorIndex.ref,
-                CONTENT_BUCKET: props.contentBucket.bucketName,
-            },
-        });
-
-        props.tables.chunks.grantReadWriteData(this.cleanupFn);
-        props.tables.keywords.grantReadWriteData(this.cleanupFn);
-        props.contentBucket.grantReadWrite(this.cleanupFn);
-
-        this.cleanupFn.addToRolePolicy(
-            new iam.PolicyStatement({
-                actions: ["s3vectors:DeleteVectors"],
-                resources: [
-                    props.vectorBucket.attrVectorBucketArn,
-                    props.vectorIndex.ref,
-                ],
-            }),
-        );
-
-        new CfnOutput(this, "ResolveCommitFnArn", {
-            value: this.resolveCommitFn.functionArn,
-        });
-        new CfnOutput(this, "CleanupFnArn", {
-            value: this.cleanupFn.functionArn,
-        });
     }
 }
