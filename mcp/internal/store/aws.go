@@ -18,8 +18,9 @@ import (
 
 // AWSConfig holds configuration for the DynamoDB-backed store.
 type AWSConfig struct {
-	Region      string // defaults to AWS_REGION env var
-	ChunksTable string // DynamoDB table for doc chunks
+	Region         string // defaults to AWS_REGION env var
+	ChunksTable    string // DynamoDB table for doc chunks
+	ChunksTableGsi string // GSI name for ref-commitSha queries
 }
 
 // AWSConfigFromEnv reads configuration from environment variables.
@@ -31,8 +32,9 @@ type AWSConfig struct {
 //   AWS_REGION / AWS_DEFAULT_REGION
 func AWSConfigFromEnv() AWSConfig {
 	return AWSConfig{
-		Region:      envOr("AWS_REGION", envOr("AWS_DEFAULT_REGION", "us-east-1")),
-		ChunksTable: os.Getenv("CHUNKS_TABLE"),
+		Region:         envOr("AWS_REGION", envOr("AWS_DEFAULT_REGION", "us-east-1")),
+		ChunksTable:    os.Getenv("CHUNKS_TABLE"),
+		ChunksTableGsi: envOr("CHUNKS_TABLE_GSI", "ref-commitSha-index"),
 	}
 }
 
@@ -225,6 +227,64 @@ func (s *AWSStore) ListDocSets(ctx context.Context) ([]model.DocSet, error) {
 		result = append(result, *ds)
 	}
 	return result, nil
+}
+
+// DeleteDocSet deletes all chunks for the given ref + commitSha using the GSI.
+// Returns the number of deleted chunks.
+func (s *AWSStore) DeleteDocSet(ctx context.Context, ref, commitSha string) (int, error) {
+	var ids []string
+
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String(s.config.ChunksTable),
+		IndexName:              aws.String(s.config.ChunksTableGsi),
+		KeyConditionExpression: aws.String("#ref = :ref AND commitSha = :commitSha"),
+		ExpressionAttributeNames: map[string]string{
+			"#ref": "ref",
+		},
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":ref":       &types.AttributeValueMemberS{Value: ref},
+			":commitSha": &types.AttributeValueMemberS{Value: commitSha},
+		},
+		ProjectionExpression: aws.String("chunkId"),
+	}
+
+	paginator := dynamodb.NewQueryPaginator(s.ddb, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("query gsi: %w", err)
+		}
+		for _, item := range page.Items {
+			if v, ok := item["chunkId"].(*types.AttributeValueMemberS); ok {
+				ids = append(ids, v.Value)
+			}
+		}
+	}
+
+	const maxBatch = 25
+	for i := 0; i < len(ids); i += maxBatch {
+		end := i + maxBatch
+		if end > len(ids) {
+			end = len(ids)
+		}
+		var reqs []types.WriteRequest
+		for _, id := range ids[i:end] {
+			reqs = append(reqs, types.WriteRequest{
+				DeleteRequest: &types.DeleteRequest{
+					Key: map[string]types.AttributeValue{
+						"chunkId": &types.AttributeValueMemberS{Value: id},
+					},
+				},
+			})
+		}
+		if _, err := s.ddb.BatchWriteItem(ctx, &dynamodb.BatchWriteItemInput{
+			RequestItems: map[string][]types.WriteRequest{s.config.ChunksTable: reqs},
+		}); err != nil {
+			return 0, fmt.Errorf("batch delete chunks: %w", err)
+		}
+	}
+
+	return len(ids), nil
 }
 
 // Status returns the current state of the index.

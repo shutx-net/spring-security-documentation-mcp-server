@@ -42,6 +42,7 @@ if (config.domain) {
       githubRepo: config.github.repo,
       ecrRepository: service.ecrRepository,
       ecsServiceArn: service.ecsServiceArn,
+      indexerRepository: storage.indexerRepository,
     });
     cicd.addDependency(service);
   }
