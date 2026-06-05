@@ -55,6 +55,7 @@ const pipeline = new PipelineStack(app, `${prefix}-pipeline`, {
   vectorBucket: storage.vectorBucket,
   vectorIndex: storage.vectorIndex,
   tables: storage.tables,
+  chunksTableGsiName: storage.chunksTableGsiName,
 });
 pipeline.addDependency(storage);
 
