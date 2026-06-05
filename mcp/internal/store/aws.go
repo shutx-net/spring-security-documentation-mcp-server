@@ -25,6 +25,9 @@ type AWSConfig struct {
 	ChunksTable    string // DynamoDB table for doc chunks
 	ChunksTableGsi string // GSI name for ref-commitSha queries
 
+	// Keyword index (optional — enables O(1) lookup for known class names)
+	KeywordsTable string // DynamoDB table for keyword index
+
 	// Semantic search (optional — if unset, falls back to keyword-only search)
 	VectorBucket        string // S3 Vectors bucket ARN
 	VectorIndex         string // S3 Vectors index ARN
@@ -45,6 +48,7 @@ func AWSConfigFromEnv() AWSConfig {
 		Region:              envOr("AWS_REGION", envOr("AWS_DEFAULT_REGION", "us-east-1")),
 		ChunksTable:         os.Getenv("CHUNKS_TABLE"),
 		ChunksTableGsi:      envOr("CHUNKS_TABLE_GSI", "ref-commitSha-index"),
+		KeywordsTable:       os.Getenv("KEYWORDS_TABLE"),
 		VectorBucket:        os.Getenv("VECTOR_BUCKET"),
 		VectorIndex:         os.Getenv("VECTOR_INDEX"),
 		EmbeddingModelID:    os.Getenv("EMBEDDING_MODEL_ID"),
@@ -151,16 +155,18 @@ func (s *AWSStore) GetChunk(ctx context.Context, id string) (model.DocChunk, err
 }
 
 // Search returns chunks matching the query.
-// When Bedrock and S3 Vectors are configured, runs keyword and vector search
-// concurrently and merges results (vector results ranked first).
-// Falls back to keyword-only search when semantic search is not configured.
+// Runs up to three searches concurrently and merges results in priority order:
+//  1. vector search (semantic, via Bedrock + S3 Vectors)
+//  2. keywords table search (exact keyword lookup, O(1))
+//  3. keyword scan (contains() filter on contentText, fallback)
 func (s *AWSStore) Search(ctx context.Context, params model.SearchParams) (model.SearchResult, error) {
 	limit := params.Limit
 	if limit <= 0 || limit > 20 {
 		limit = 10
 	}
 
-	if s.embedder == nil {
+	// Fast path: neither semantic nor keyword-table search configured.
+	if s.embedder == nil && s.config.KeywordsTable == "" {
 		chunks, err := s.keywordSearch(ctx, params, limit)
 		return model.SearchResult{Chunks: chunks}, err
 	}
@@ -171,28 +177,44 @@ func (s *AWSStore) Search(ctx context.Context, params model.SearchParams) (model
 	}
 	kCh := make(chan searchResult, 1)
 	vCh := make(chan searchResult, 1)
+	ktCh := make(chan searchResult, 1)
 
 	go func() {
 		chunks, err := s.keywordSearch(ctx, params, limit)
 		kCh <- searchResult{chunks, err}
 	}()
 	go func() {
-		chunks, err := s.vectorSearch(ctx, params, limit*2)
-		vCh <- searchResult{chunks, err}
+		if s.embedder != nil {
+			chunks, err := s.vectorSearch(ctx, params, limit*2)
+			vCh <- searchResult{chunks, err}
+		} else {
+			vCh <- searchResult{}
+		}
+	}()
+	go func() {
+		if s.config.KeywordsTable != "" {
+			chunks, err := s.keywordsTableSearch(ctx, params, limit)
+			ktCh <- searchResult{chunks, err}
+		} else {
+			ktCh <- searchResult{}
+		}
 	}()
 
-	kr, vr := <-kCh, <-vCh
+	kr, vr, ktr := <-kCh, <-vCh, <-ktCh
 	if kr.err != nil {
 		log.Printf("keyword search error: %v", kr.err)
 	}
 	if vr.err != nil {
 		log.Printf("vector search error: %v", vr.err)
 	}
-	if kr.err != nil && vr.err != nil {
+	if ktr.err != nil {
+		log.Printf("keywords table search error: %v", ktr.err)
+	}
+	if kr.err != nil && vr.err != nil && ktr.err != nil {
 		return model.SearchResult{}, fmt.Errorf("search failed: %w", kr.err)
 	}
 
-	return model.SearchResult{Chunks: mergeSearchResults(vr.chunks, kr.chunks, limit)}, nil
+	return model.SearchResult{Chunks: mergeSearchResults(limit, vr.chunks, ktr.chunks, kr.chunks)}, nil
 }
 
 // keywordSearch performs a DynamoDB Scan with a contains() filter on contentText.
@@ -326,30 +348,69 @@ func (s *AWSStore) batchGetChunks(ctx context.Context, ids []string) ([]model.Do
 	return result, nil
 }
 
-// mergeSearchResults deduplicates and interleaves vector + keyword results.
-// Vector results rank first; keyword results fill remaining slots.
-func mergeSearchResults(vector, keyword []model.DocChunk, limit int) []model.DocChunk {
-	seen := make(map[string]struct{}, len(vector)+len(keyword))
-	out := make([]model.DocChunk, 0, limit)
-	for _, c := range vector {
-		if len(out) >= limit {
-			break
-		}
-		if _, dup := seen[c.ID]; dup {
-			continue
-		}
-		seen[c.ID] = struct{}{}
-		out = append(out, c)
+// keywordsTableSearch queries the keywords index table for an exact keyword match.
+// Uses begins_with on the sort key (refAreaChunkId) to filter by ref and area efficiently.
+func (s *AWSStore) keywordsTableSearch(ctx context.Context, params model.SearchParams, limit int) ([]model.DocChunk, error) {
+	keyCond := "#kw = :kw"
+	names := map[string]string{"#kw": "keyword"}
+	values := map[string]types.AttributeValue{
+		":kw": &types.AttributeValueMemberS{Value: params.Query},
 	}
-	for _, c := range keyword {
-		if len(out) >= limit {
-			break
-		}
-		if _, dup := seen[c.ID]; dup {
+
+	if params.Ref != "" && params.Area != "" {
+		keyCond += " AND begins_with(refAreaChunkId, :prefix)"
+		values[":prefix"] = &types.AttributeValueMemberS{Value: params.Ref + "#" + params.Area + "#"}
+	} else if params.Ref != "" {
+		keyCond += " AND begins_with(refAreaChunkId, :prefix)"
+		values[":prefix"] = &types.AttributeValueMemberS{Value: params.Ref + "#"}
+	}
+
+	out, err := s.ddb.Query(ctx, &dynamodb.QueryInput{
+		TableName:                 aws.String(s.config.KeywordsTable),
+		KeyConditionExpression:    aws.String(keyCond),
+		ExpressionAttributeNames:  names,
+		ExpressionAttributeValues: values,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("keywords table query: %w", err)
+	}
+	if len(out.Items) == 0 {
+		return nil, nil
+	}
+
+	seen := make(map[string]struct{})
+	ids := make([]string, 0, len(out.Items))
+	for _, item := range out.Items {
+		v, ok := item["chunkId"].(*types.AttributeValueMemberS)
+		if !ok {
 			continue
 		}
-		seen[c.ID] = struct{}{}
-		out = append(out, c)
+		if _, dup := seen[v.Value]; dup {
+			continue
+		}
+		seen[v.Value] = struct{}{}
+		ids = append(ids, v.Value)
+		if len(ids) >= limit {
+			break
+		}
+	}
+	return s.batchGetChunks(ctx, ids)
+}
+
+// mergeSearchResults deduplicates and merges results from multiple sources in priority order.
+func mergeSearchResults(limit int, sources ...[]model.DocChunk) []model.DocChunk {
+	seen := make(map[string]struct{})
+	out := make([]model.DocChunk, 0, limit)
+	for _, source := range sources {
+		for _, c := range source {
+			if len(out) >= limit {
+				return out
+			}
+			if _, dup := seen[c.ID]; !dup {
+				seen[c.ID] = struct{}{}
+				out = append(out, c)
+			}
+		}
 	}
 	return out
 }
