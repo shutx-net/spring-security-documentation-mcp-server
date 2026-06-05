@@ -62,5 +62,5 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ vars.INDEXER_ECR_REPOSITORY }}:${{ github.sha }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ vars.INDEXER_ECR_REPOSITORY }}:latest
+            ${{ vars.INDEXER_ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ vars.INDEXER_ECR_REPOSITORY }}:latest
