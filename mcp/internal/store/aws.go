@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -10,8 +11,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-sdk-go-v2/service/s3vectors"
 
 	"github.com/shutx-net/spring-security-documentation-mcp-server/internal/model"
 )
@@ -21,6 +24,12 @@ type AWSConfig struct {
 	Region         string // defaults to AWS_REGION env var
 	ChunksTable    string // DynamoDB table for doc chunks
 	ChunksTableGsi string // GSI name for ref-commitSha queries
+
+	// Semantic search (optional — if unset, falls back to keyword-only search)
+	VectorBucket        string // S3 Vectors bucket ARN
+	VectorIndex         string // S3 Vectors index ARN
+	EmbeddingModelID    string // Bedrock model ID (e.g. amazon.titan-embed-text-v2:0)
+	EmbeddingCacheTable string // DynamoDB table for embedding cache
 }
 
 // AWSConfigFromEnv reads configuration from environment variables.
@@ -30,11 +39,16 @@ type AWSConfig struct {
 //
 // Optional (standard AWS SDK env vars are also honoured):
 //   AWS_REGION / AWS_DEFAULT_REGION
+//   VECTOR_BUCKET, VECTOR_INDEX, EMBEDDING_MODEL_ID, EMBEDDING_CACHE_TABLE
 func AWSConfigFromEnv() AWSConfig {
 	return AWSConfig{
-		Region:         envOr("AWS_REGION", envOr("AWS_DEFAULT_REGION", "us-east-1")),
-		ChunksTable:    os.Getenv("CHUNKS_TABLE"),
-		ChunksTableGsi: envOr("CHUNKS_TABLE_GSI", "ref-commitSha-index"),
+		Region:              envOr("AWS_REGION", envOr("AWS_DEFAULT_REGION", "us-east-1")),
+		ChunksTable:         os.Getenv("CHUNKS_TABLE"),
+		ChunksTableGsi:      envOr("CHUNKS_TABLE_GSI", "ref-commitSha-index"),
+		VectorBucket:        os.Getenv("VECTOR_BUCKET"),
+		VectorIndex:         os.Getenv("VECTOR_INDEX"),
+		EmbeddingModelID:    os.Getenv("EMBEDDING_MODEL_ID"),
+		EmbeddingCacheTable: os.Getenv("EMBEDDING_CACHE_TABLE"),
 	}
 }
 
@@ -45,16 +59,17 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-// AWSStore implements Store using Amazon DynamoDB.
-//
-// Search (Phase 1): DynamoDB Scan + FilterExpression on contentText.
-// Future: replace Search with Bedrock Embeddings + S3 Vectors.
+// AWSStore implements Store using Amazon DynamoDB, Bedrock, and S3 Vectors.
 type AWSStore struct {
-	ddb    *dynamodb.Client
-	config AWSConfig
+	ddb      *dynamodb.Client
+	embedder *bedrockEmbedder  // nil when semantic search is not configured
+	sv       *s3vectors.Client // nil when semantic search is not configured
+	cache    *embeddingCache   // nil when embedding cache table is not configured
+	config   AWSConfig
 }
 
 // NewAWSStore creates a DynamoDB-backed Store.
+// Bedrock and S3 Vectors clients are initialised only when the required env vars are set.
 func NewAWSStore(ctx context.Context, cfg AWSConfig) (*AWSStore, error) {
 	if cfg.ChunksTable == "" {
 		return nil, fmt.Errorf("CHUNKS_TABLE is not set")
@@ -65,7 +80,21 @@ func NewAWSStore(ctx context.Context, cfg AWSConfig) (*AWSStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load AWS config: %w", err)
 	}
-	return &AWSStore{ddb: dynamodb.NewFromConfig(awsCfg), config: cfg}, nil
+
+	store := &AWSStore{
+		ddb:    dynamodb.NewFromConfig(awsCfg),
+		config: cfg,
+	}
+
+	if cfg.VectorIndex != "" && cfg.EmbeddingModelID != "" {
+		store.embedder = newBedrockEmbedder(bedrockruntime.NewFromConfig(awsCfg), cfg.EmbeddingModelID)
+		store.sv = s3vectors.NewFromConfig(awsCfg)
+	}
+	if cfg.EmbeddingCacheTable != "" && store.embedder != nil {
+		store.cache = &embeddingCache{ddb: store.ddb, table: cfg.EmbeddingCacheTable}
+	}
+
+	return store, nil
 }
 
 func (s *AWSStore) Close() error { return nil }
@@ -121,23 +150,58 @@ func (s *AWSStore) GetChunk(ctx context.Context, id string) (model.DocChunk, err
 	return fromItem(item), nil
 }
 
-// Search scans DynamoDB for chunks matching the query using a paginator.
-//
-// Phase 1 implementation: FilterExpression with contains() on contentText.
-// This performs a full table scan and is suitable for small datasets.
-// Phase 2 will replace this with Bedrock Embeddings + S3 Vectors.
+// Search returns chunks matching the query.
+// When Bedrock and S3 Vectors are configured, runs keyword and vector search
+// concurrently and merges results (vector results ranked first).
+// Falls back to keyword-only search when semantic search is not configured.
 func (s *AWSStore) Search(ctx context.Context, params model.SearchParams) (model.SearchResult, error) {
 	limit := params.Limit
 	if limit <= 0 || limit > 20 {
 		limit = 10
 	}
 
+	if s.embedder == nil {
+		chunks, err := s.keywordSearch(ctx, params, limit)
+		return model.SearchResult{Chunks: chunks}, err
+	}
+
+	type searchResult struct {
+		chunks []model.DocChunk
+		err    error
+	}
+	kCh := make(chan searchResult, 1)
+	vCh := make(chan searchResult, 1)
+
+	go func() {
+		chunks, err := s.keywordSearch(ctx, params, limit)
+		kCh <- searchResult{chunks, err}
+	}()
+	go func() {
+		chunks, err := s.vectorSearch(ctx, params, limit*2)
+		vCh <- searchResult{chunks, err}
+	}()
+
+	kr, vr := <-kCh, <-vCh
+	if kr.err != nil {
+		log.Printf("keyword search error: %v", kr.err)
+	}
+	if vr.err != nil {
+		log.Printf("vector search error: %v", vr.err)
+	}
+	if kr.err != nil && vr.err != nil {
+		return model.SearchResult{}, fmt.Errorf("search failed: %w", kr.err)
+	}
+
+	return model.SearchResult{Chunks: mergeSearchResults(vr.chunks, kr.chunks, limit)}, nil
+}
+
+// keywordSearch performs a DynamoDB Scan with a contains() filter on contentText.
+func (s *AWSStore) keywordSearch(ctx context.Context, params model.SearchParams, limit int) ([]model.DocChunk, error) {
 	var filters []string
 	names := map[string]string{"#ct": "contentText"}
 	values := map[string]types.AttributeValue{
 		":q": &types.AttributeValueMemberS{Value: params.Query},
 	}
-
 	filters = append(filters, "contains(#ct, :q)")
 
 	if params.Ref != "" {
@@ -158,25 +222,136 @@ func (s *AWSStore) Search(ctx context.Context, params model.SearchParams) (model
 		ExpressionAttributeValues: values,
 	}
 
-	var result model.SearchResult
+	var chunks []model.DocChunk
 	paginator := dynamodb.NewScanPaginator(s.ddb, input)
-	for paginator.HasMorePages() && len(result.Chunks) < limit {
+	for paginator.HasMorePages() && len(chunks) < limit {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			return model.SearchResult{}, fmt.Errorf("scan page: %w", err)
+			return nil, fmt.Errorf("scan page: %w", err)
 		}
 		for _, raw := range page.Items {
-			if len(result.Chunks) >= limit {
+			if len(chunks) >= limit {
 				break
 			}
 			var item chunkItem
 			if err := attributevalue.UnmarshalMap(raw, &item); err != nil {
 				continue
 			}
-			result.Chunks = append(result.Chunks, fromItem(item))
+			chunks = append(chunks, fromItem(item))
+		}
+	}
+	return chunks, nil
+}
+
+// vectorSearch embeds the query with Bedrock, queries S3 Vectors, and fetches
+// the matching chunks from DynamoDB via BatchGetItem.
+func (s *AWSStore) vectorSearch(ctx context.Context, params model.SearchParams, topK int) ([]model.DocChunk, error) {
+	vec, err := s.getOrEmbedQuery(ctx, params.Query)
+	if err != nil {
+		return nil, err
+	}
+
+	matches, err := queryVectors(ctx, s.sv, s.config.VectorIndex, vec, topK, params.Ref, params.Area)
+	if err != nil {
+		return nil, err
+	}
+	if len(matches) == 0 {
+		return nil, nil
+	}
+
+	ids := make([]string, len(matches))
+	for i, m := range matches {
+		ids[i] = m.Key
+	}
+	return s.batchGetChunks(ctx, ids)
+}
+
+// getOrEmbedQuery returns a cached embedding or calls Bedrock to compute one.
+func (s *AWSStore) getOrEmbedQuery(ctx context.Context, query string) ([]float32, error) {
+	if s.cache != nil {
+		hash := queryHash(query)
+		if v, ok := s.cache.get(ctx, hash); ok {
+			return v, nil
+		}
+		v, err := s.embedder.embed(ctx, query)
+		if err != nil {
+			return nil, err
+		}
+		s.cache.put(ctx, hash, v)
+		return v, nil
+	}
+	return s.embedder.embed(ctx, query)
+}
+
+// batchGetChunks fetches chunks by ID in batches of 100 (BatchGetItem limit).
+func (s *AWSStore) batchGetChunks(ctx context.Context, ids []string) ([]model.DocChunk, error) {
+	const maxBatch = 100
+	var result []model.DocChunk
+
+	for i := 0; i < len(ids); i += maxBatch {
+		end := i + maxBatch
+		if end > len(ids) {
+			end = len(ids)
+		}
+		keys := make([]map[string]types.AttributeValue, end-i)
+		for j, id := range ids[i:end] {
+			keys[j] = map[string]types.AttributeValue{
+				"chunkId": &types.AttributeValueMemberS{Value: id},
+			}
+		}
+
+		remaining := map[string]types.KeysAndAttributes{
+			s.config.ChunksTable: {Keys: keys},
+		}
+		for len(remaining) > 0 {
+			out, err := s.ddb.BatchGetItem(ctx, &dynamodb.BatchGetItemInput{
+				RequestItems: remaining,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("batch get chunks: %w", err)
+			}
+			for _, raw := range out.Responses[s.config.ChunksTable] {
+				var item chunkItem
+				if err := attributevalue.UnmarshalMap(raw, &item); err != nil {
+					continue
+				}
+				result = append(result, fromItem(item))
+			}
+			remaining = out.UnprocessedKeys
+			if len(remaining) > 0 {
+				time.Sleep(50 * time.Millisecond)
+			}
 		}
 	}
 	return result, nil
+}
+
+// mergeSearchResults deduplicates and interleaves vector + keyword results.
+// Vector results rank first; keyword results fill remaining slots.
+func mergeSearchResults(vector, keyword []model.DocChunk, limit int) []model.DocChunk {
+	seen := make(map[string]struct{}, len(vector)+len(keyword))
+	out := make([]model.DocChunk, 0, limit)
+	for _, c := range vector {
+		if len(out) >= limit {
+			break
+		}
+		if _, dup := seen[c.ID]; dup {
+			continue
+		}
+		seen[c.ID] = struct{}{}
+		out = append(out, c)
+	}
+	for _, c := range keyword {
+		if len(out) >= limit {
+			break
+		}
+		if _, dup := seen[c.ID]; dup {
+			continue
+		}
+		seen[c.ID] = struct{}{}
+		out = append(out, c)
+	}
+	return out
 }
 
 // ListDocSets returns unique documentation sets by paginating the full chunks table.
