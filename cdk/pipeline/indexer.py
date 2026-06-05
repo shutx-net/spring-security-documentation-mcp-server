@@ -1,19 +1,28 @@
-"""Spring Security docs indexer — Phase 2 of the CodeBuild pipeline.
+"""Spring Security docs indexer.
 
-Usage (called from buildspec.yml):
+Usage:
+    # local site directory (CodeBuild legacy)
     python pipeline/indexer.py \\
         --site-dir /tmp/spring-security-6.5.x/docs/build/site \\
         --ref 6.5.x \\
         --commit-sha abc123def
 
-Environment variables (injected by CDK / CodeBuild):
+    # S3 artifact (ECS Fargate)
+    python pipeline/indexer.py \\
+        --artifact-s3-key artifacts/6.5.x/abc123def/site.tar.gz \\
+        --ref 6.5.x \\
+        --commit-sha abc123def
+
+    The tar.gz must be created with: tar -czf site.tar.gz -C /path/to/site .
+
+Environment variables (injected by CDK):
     CONTENT_BUCKET      S3 bucket for chunks.jsonl.gz / metadata.json / latest.json
     VECTOR_BUCKET       S3 Vector Bucket name
     VECTOR_INDEX        S3 Vector Index name
     CHUNKS_TABLE        DynamoDB table for doc chunks
     KEYWORDS_TABLE      DynamoDB table for keyword index
     EMBEDDING_MODEL_ID  Bedrock model ID (amazon.titan-embed-text-v2:0)
-    AWS_DEFAULT_REGION  Auto-set by CodeBuild
+    AWS_DEFAULT_REGION  Auto-set by CodeBuild / ECS
 """
 
 import argparse
@@ -21,7 +30,10 @@ import gzip
 import hashlib
 import json
 import os
+import shutil
 import sys
+import tarfile
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -364,7 +376,9 @@ def publish_to_s3(s3_client, bucket: str, ref: str, commit_sha: str,
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Index Spring Security docs into AWS")
-    p.add_argument("--site-dir",   required=True, help="Path to Antora-built site root")
+    src = p.add_mutually_exclusive_group(required=True)
+    src.add_argument("--site-dir",        help="Path to Antora-built site root (local)")
+    src.add_argument("--artifact-s3-key", help="S3 key for site.tar.gz in CONTENT_BUCKET")
     p.add_argument("--ref",        required=True, help="Spring Security ref, e.g. 6.5.x")
     p.add_argument("--commit-sha", required=True, help="Git commit SHA of the Spring Security repo")
     return p.parse_args()
@@ -382,14 +396,47 @@ def main() -> None:
     clients  = _clients()
     built_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    # Resolve site directory
+    tmp_dir = None
+    if args.artifact_s3_key:
+        tmp_dir = tempfile.mkdtemp()
+        archive_path = os.path.join(tmp_dir, "site.tar.gz")
+        print(f"[{args.ref}] Downloading s3://{content_bucket}/{args.artifact_s3_key} ...")
+        clients["s3"].download_file(content_bucket, args.artifact_s3_key, archive_path)
+        site_dir = os.path.join(tmp_dir, "site")
+        os.makedirs(site_dir)
+        with tarfile.open(archive_path) as tf:
+            tf.extractall(site_dir, filter="data")
+        print(f"[{args.ref}] Extracted to {site_dir}")
+    else:
+        site_dir = args.site_dir
+
+    try:
+        _run(args, site_dir, content_bucket, vector_index, chunks_table, keywords_table, model_id, clients, built_at)
+    finally:
+        if tmp_dir:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def _run(
+    args: argparse.Namespace,
+    site_dir: str,
+    content_bucket: str,
+    vector_index: str,
+    chunks_table: str,
+    keywords_table: str,
+    model_id: str,
+    clients: dict,
+    built_at: str,
+) -> None:
     # 1. Parse HTML → chunks
-    site_path  = Path(args.site_dir)
+    site_path  = Path(site_dir)
     html_files = sorted(site_path.rglob("*.html"))
     print(f"[{args.ref}] Found {len(html_files)} HTML files")
 
     all_chunks: list[dict] = []
     for html_path in html_files:
-        all_chunks.extend(parse_html(str(html_path), args.site_dir, args.ref, args.commit_sha, built_at))
+        all_chunks.extend(parse_html(str(html_path), site_dir, args.ref, args.commit_sha, built_at))
     print(f"[{args.ref}] Generated {len(all_chunks)} chunks")
 
     if not all_chunks:

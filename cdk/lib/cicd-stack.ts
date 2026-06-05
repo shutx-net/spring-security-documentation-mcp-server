@@ -12,13 +12,14 @@ export interface CicdStackProps extends StackProps {
   readonly githubRepo: string;
   readonly ecrRepository: ecr.IRepository;
   readonly ecsServiceArn: string;
+  readonly indexerRepository: ecr.IRepository;
 }
 
 export class CicdStack extends Stack {
   constructor(scope: Construct, id: string, props: CicdStackProps) {
     super(scope, id, props);
 
-    const { githubOrg, githubRepo, ecrRepository, ecsServiceArn } = props;
+    const { githubOrg, githubRepo, ecrRepository, ecsServiceArn, indexerRepository } = props;
 
     // OIDC provider for GitHub Actions.
     // OidcProviderNative uses the native AWS::IAM::OIDCProvider CloudFormation resource
@@ -62,7 +63,7 @@ export class CicdStack extends Stack {
         'ecr:PutImage',
         'ecr:UploadLayerPart',
       ],
-      resources: [ecrRepository.repositoryArn],
+      resources: [ecrRepository.repositoryArn, indexerRepository.repositoryArn],
     }));
 
     // GetAuthorizationToken operates on * (not a specific repository).
