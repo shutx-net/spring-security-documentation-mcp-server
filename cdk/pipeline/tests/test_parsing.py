@@ -212,6 +212,25 @@ def test_parse_html_heading_without_body_produces_no_chunk(tmp_path):
     assert chunks[0]["title"] == "Section"
 
 
+def test_parse_html_no_empty_content_text(tmp_path):
+    # HTML nodes with no visible text (e.g. empty divs) must not produce a
+    # chunk with contentText="" — Bedrock rejects empty embedding inputs.
+    site = tmp_path / "site"
+    site.mkdir()
+    page = site / "page.html"
+    page.write_text(
+        "<html><body><article>"
+        "<h1>Title</h1>"
+        "<div></div><div>   </div>"
+        "<h2>Next</h2><p>Real content</p>"
+        "</article></body></html>",
+        encoding="utf-8",
+    )
+    chunks = parse_html(str(page), str(site), "6.5.x", "abc", "2026-06-06T00:00:00Z")
+    for chunk in chunks:
+        assert chunk["contentText"].strip() != "", f"Empty contentText in chunk: {chunk['title']}"
+
+
 def test_parse_html_antora_nested_sections(tmp_path):
     # Antora wraps h2/h3 inside div.sect1/sect2. _iter_content_nodes must
     # surface those headings rather than treating the wrapper div as content.
