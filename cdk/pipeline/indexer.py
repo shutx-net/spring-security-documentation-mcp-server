@@ -89,6 +89,30 @@ def _clients() -> dict:
 # HTML parsing + chunking
 # ---------------------------------------------------------------------------
 
+_BOILERPLATE_PREFIXES = (
+    "This version is still in development and is not considered stable yet.",
+)
+
+
+def _strip_boilerplate(text: str) -> str:
+    """Remove Antora snapshot warning banners that appear near the top of pages."""
+    for prefix in _BOILERPLATE_PREFIXES:
+        idx = text.find(prefix)
+        if idx == -1 or idx >= 500:
+            continue
+        # The banner's second sentence always ends with "!"; find it within 300 chars.
+        excl = text.find("!", idx + len(prefix))
+        if excl != -1 and excl - idx < 300:
+            end = excl + 1
+            while end < len(text) and text[end] in " \t\n\r":
+                end += 1
+        else:
+            end_nl = text.find("\n", idx + len(prefix))
+            end = end_nl + 1 if end_nl != -1 else len(text)
+        text = (text[:idx] + text[end:]).strip()
+    return text
+
+
 def _detect_area(html_path: str) -> str:
     # Check path components from deepest (most specific) to shallowest so that
     # servlet/oauth2/login.html → "oauth2" rather than "servlet".
@@ -153,19 +177,21 @@ def parse_html(html_path: str, site_dir: str, ref: str, commit_sha: str, built_a
 
     def flush() -> None:
         if html_parts and text_parts and current_headings:
-            chunks.append({
-                "chunkId":     _chunk_id(ref, commit_sha, canonical_url, current_headings),
-                "ref":         ref,
-                "commitSha":   commit_sha,
-                "builtAt":     built_at,
-                "area":        area,
-                "title":       current_headings[-1],
-                "headingPath": list(current_headings),
-                "canonicalUrl": canonical_url,
-                "sourcePath":  source_path,
-                "contentHtml": "\n".join(html_parts)[:MAX_INPUT_CHARS],
-                "contentText": "\n".join(text_parts)[:MAX_INPUT_CHARS],
-            })
+            content_text = _strip_boilerplate("\n".join(text_parts))[:MAX_INPUT_CHARS]
+            if content_text:
+                chunks.append({
+                    "chunkId":     _chunk_id(ref, commit_sha, canonical_url, current_headings),
+                    "ref":         ref,
+                    "commitSha":   commit_sha,
+                    "builtAt":     built_at,
+                    "area":        area,
+                    "title":       current_headings[-1],
+                    "headingPath": list(current_headings),
+                    "canonicalUrl": canonical_url,
+                    "sourcePath":  source_path,
+                    "contentHtml": "\n".join(html_parts)[:MAX_INPUT_CHARS],
+                    "contentText": content_text,
+                })
         html_parts.clear()
         text_parts.clear()
 
@@ -201,7 +227,7 @@ def parse_html(html_path: str, site_dir: str, ref: str, commit_sha: str, built_a
     if not chunks:
         h1 = soup.find("h1")
         fallback_title = h1.get_text(strip=True) if h1 else Path(html_path).stem
-        content_text = content_div.get_text(separator="\n", strip=True)
+        content_text = _strip_boilerplate(content_div.get_text(separator="\n", strip=True))
         if content_text.strip():
             chunks.append({
                 "chunkId":     _chunk_id(ref, commit_sha, canonical_url, [fallback_title]),
