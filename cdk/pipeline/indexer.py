@@ -431,8 +431,9 @@ def _run(
 ) -> None:
     # 1. Parse HTML → chunks
     site_path  = Path(site_dir)
-    html_files = sorted(site_path.rglob("*.html"))
-    print(f"[{args.ref}] Found {len(html_files)} HTML files")
+    all_html   = sorted(site_path.rglob("*.html"))
+    html_files = [f for f in all_html if "api" not in f.relative_to(site_dir).parts]
+    print(f"[{args.ref}] Found {len(html_files)} HTML files (skipped {len(all_html) - len(html_files)} api/ files)")
 
     all_chunks: list[dict] = []
     for html_path in html_files:

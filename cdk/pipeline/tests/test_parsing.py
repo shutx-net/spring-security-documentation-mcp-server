@@ -126,3 +126,17 @@ def test_parse_html_source_path(tmp_path):
     page.write_text("<html><body><article><h1>OAuth2</h1></article></body></html>", encoding="utf-8")
     chunks = parse_html(str(page), str(site), "6.5.x", "abc", "2026-06-06T00:00:00Z")
     assert chunks[0]["sourcePath"] == str(Path("oauth2") / "login.html")
+
+
+def test_api_files_excluded_from_indexing(tmp_path):
+    site = tmp_path / "site"
+    (site / "api" / "java").mkdir(parents=True)
+    (site / "servlet").mkdir(parents=True)
+    (site / "api" / "java" / "Foo.html").write_text("x", encoding="utf-8")
+    (site / "servlet" / "auth.html").write_text("x", encoding="utf-8")
+
+    all_html = sorted(site.rglob("*.html"))
+    html_files = [f for f in all_html if "api" not in f.relative_to(site).parts]
+
+    assert len(html_files) == 1
+    assert html_files[0].name == "auth.html"
