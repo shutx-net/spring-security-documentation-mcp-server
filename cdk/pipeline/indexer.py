@@ -110,17 +110,33 @@ def _chunk_id(ref: str, commit_sha: str, canonical_url: str, heading_path: list[
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def parse_html(html_path: str, site_dir: str, ref: str, commit_sha: str, built_at: str) -> list[dict]:
-    """Parse one HTML file and return chunks split at h1/h2/h3 boundaries.
+def _iter_content_nodes(element):
+    """Yield (kind, node) pairs in document order.
 
-    TODO: implement proper heading-level splitting.
-    Current: one chunk per page (h1 boundary only).
+    kind is 'h1', 'h2', 'h3', or 'content'.
+    Descends into non-heading wrapper elements (e.g. Antora's div.sect1/sect2)
+    so that headings nested inside those wrappers are surfaced at the correct
+    level rather than being swallowed as opaque content blocks.
     """
+    for child in element.children:
+        if not hasattr(child, "name") or child.name is None:
+            continue
+        if child.name in ("h1", "h2", "h3"):
+            yield child.name, child
+        elif child.find(["h1", "h2", "h3"]):
+            yield from _iter_content_nodes(child)
+        else:
+            yield "content", child
+
+
+def parse_html(html_path: str, site_dir: str, ref: str, commit_sha: str, built_at: str) -> list[dict]:
+    """Parse one HTML file and return chunks split at h1/h2/h3 boundaries."""
     with open(html_path, encoding="utf-8") as f:
         soup = BeautifulSoup(f, "lxml")
 
     area = _detect_area(html_path)
     canonical_url = _canonical_url(html_path, site_dir)
+    source_path = str(Path(html_path).relative_to(site_dir))
 
     # Remove nav/header/footer noise before extracting content
     for tag in soup.select("nav, header, footer, .nav, .toc, script, style"):
@@ -130,26 +146,78 @@ def parse_html(html_path: str, site_dir: str, ref: str, commit_sha: str, built_a
     if content_div is None:
         return []
 
-    h1 = soup.find("h1")
-    title = h1.get_text(strip=True) if h1 else Path(html_path).stem
-    heading_path = [title]
+    current_headings: list[str] = []
+    html_parts: list[str] = []
+    text_parts: list[str] = []
+    chunks: list[dict] = []
 
-    content_html = str(content_div)
-    content_text = content_div.get_text(separator="\n", strip=True)
+    def flush() -> None:
+        if html_parts and current_headings:
+            chunks.append({
+                "chunkId":     _chunk_id(ref, commit_sha, canonical_url, current_headings),
+                "ref":         ref,
+                "commitSha":   commit_sha,
+                "builtAt":     built_at,
+                "area":        area,
+                "title":       current_headings[-1],
+                "headingPath": list(current_headings),
+                "canonicalUrl": canonical_url,
+                "sourcePath":  source_path,
+                "contentHtml": "\n".join(html_parts)[:MAX_INPUT_CHARS],
+                "contentText": "\n".join(text_parts)[:MAX_INPUT_CHARS],
+            })
+        html_parts.clear()
+        text_parts.clear()
 
-    return [{
-        "chunkId":     _chunk_id(ref, commit_sha, canonical_url, heading_path),
-        "ref":         ref,
-        "commitSha":   commit_sha,
-        "builtAt":     built_at,
-        "area":        area,
-        "title":       title,
-        "headingPath": heading_path,
-        "canonicalUrl": canonical_url,
-        "sourcePath":  str(Path(html_path).relative_to(site_dir)),
-        "contentHtml": content_html[:MAX_INPUT_CHARS],
-        "contentText": content_text[:MAX_INPUT_CHARS],
-    }]
+    for kind, node in _iter_content_nodes(content_div):
+        if kind == "h1":
+            flush()
+            current_headings = [node.get_text(strip=True)]
+        elif kind == "h2":
+            flush()
+            h = node.get_text(strip=True)
+            current_headings = [current_headings[0], h] if current_headings else [h]
+        elif kind == "h3":
+            flush()
+            h = node.get_text(strip=True)
+            if len(current_headings) >= 2:
+                current_headings = [current_headings[0], current_headings[1], h]
+            elif len(current_headings) == 1:
+                current_headings = [current_headings[0], h]
+            else:
+                current_headings = [h]
+        else:  # content
+            if current_headings:
+                html_parts.append(str(node))
+                text = node.get_text(strip=True)
+                if text:
+                    text_parts.append(text)
+
+    flush()
+
+    # If no chunks were produced (page has no headings or all headings lacked
+    # body content), fall back to a single page-level chunk so content is not
+    # silently dropped from the index.
+    if not chunks:
+        h1 = soup.find("h1")
+        fallback_title = h1.get_text(strip=True) if h1 else Path(html_path).stem
+        content_text = content_div.get_text(separator="\n", strip=True)
+        if content_text.strip():
+            chunks.append({
+                "chunkId":     _chunk_id(ref, commit_sha, canonical_url, [fallback_title]),
+                "ref":         ref,
+                "commitSha":   commit_sha,
+                "builtAt":     built_at,
+                "area":        area,
+                "title":       fallback_title,
+                "headingPath": [fallback_title],
+                "canonicalUrl": canonical_url,
+                "sourcePath":  source_path,
+                "contentHtml": str(content_div)[:MAX_INPUT_CHARS],
+                "contentText": content_text[:MAX_INPUT_CHARS],
+            })
+
+    return chunks
 
 
 # ---------------------------------------------------------------------------
