@@ -6,6 +6,7 @@ from indexer import (
     _chunk_id,
     _detect_area,
     _iter_content_nodes,
+    _strip_boilerplate,
     parse_html,
 )
 
@@ -312,3 +313,67 @@ def test_api_files_excluded_from_indexing(tmp_path):
 
     assert len(html_files) == 1
     assert html_files[0].name == "auth.html"
+
+
+# ---------------------------------------------------------------------------
+# Boilerplate stripping
+# ---------------------------------------------------------------------------
+
+def test_strip_boilerplate_removes_snapshot_banner_single_line():
+    # get_text(strip=True) concatenates text nodes without separator, so both
+    # banner sentences appear on one line separated by a space.
+    text = (
+        "This version is still in development and is not considered stable yet. "
+        "For the latest stable version, please use Spring Security 7.0.5!\n"
+        "Real content starts here."
+    )
+    assert _strip_boilerplate(text) == "Real content starts here."
+
+
+def test_strip_boilerplate_removes_snapshot_banner_multiline():
+    # fallback path uses separator="\n", so two sentences may be on separate lines.
+    text = (
+        "This version is still in development and is not considered stable yet.\n"
+        "For the latest stable version, please use Spring Security 7.0.5!\n"
+        "Real content starts here."
+    )
+    assert _strip_boilerplate(text) == "Real content starts here."
+
+
+def test_strip_boilerplate_banner_only_returns_empty():
+    text = (
+        "This version is still in development and is not considered stable yet. "
+        "For the latest stable version, please use Spring Security 7.0.5!"
+    )
+    assert _strip_boilerplate(text) == ""
+
+
+def test_strip_boilerplate_no_banner_unchanged():
+    text = "SecurityFilterChain configures the filter chain."
+    assert _strip_boilerplate(text) == text
+
+
+def test_strip_boilerplate_banner_not_near_top_unchanged():
+    # Banner beyond the 500-char threshold must not be stripped
+    padding = "x" * 501
+    text = padding + "\nThis version is still in development and is not considered stable yet."
+    assert _strip_boilerplate(text) == text
+
+
+def test_parse_html_strips_snapshot_banner_from_chunk(tmp_path):
+    site = tmp_path / "site"
+    site.mkdir()
+    page = site / "page.html"
+    banner = "This version is still in development and is not considered stable yet. For the latest stable version, please use Spring Security 7.0.5!"
+    page.write_text(
+        "<html><body><article>"
+        "<h1>CSRF</h1>"
+        f"<div class='admonitionblock warning'><p>{banner}</p></div>"
+        "<p>CSRF protection is important.</p>"
+        "</article></body></html>",
+        encoding="utf-8",
+    )
+    chunks = parse_html(str(page), str(site), "6.5.x", "abc", "2026-06-06T00:00:00Z")
+    assert len(chunks) == 1
+    assert "is not considered stable" not in chunks[0]["contentText"]
+    assert "CSRF protection" in chunks[0]["contentText"]
