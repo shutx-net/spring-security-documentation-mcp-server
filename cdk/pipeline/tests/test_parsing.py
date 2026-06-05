@@ -5,6 +5,7 @@ from indexer import (
     _canonical_url,
     _chunk_id,
     _detect_area,
+    _iter_content_nodes,
     parse_html,
 )
 
@@ -151,6 +152,113 @@ def test_parse_html_source_path(tmp_path):
     page.write_text("<html><body><article><h1>OAuth2</h1></article></body></html>", encoding="utf-8")
     chunks = parse_html(str(page), str(site), "6.5.x", "abc", "2026-06-06T00:00:00Z")
     assert chunks[0]["sourcePath"] == str(Path("oauth2") / "login.html")
+
+
+def test_parse_html_h2_splits_into_two_chunks(tmp_path):
+    site = tmp_path / "site"
+    site.mkdir()
+    page = site / "page.html"
+    page.write_text(
+        "<html><body><article>"
+        "<h1>Auth</h1><p>Intro</p>"
+        "<h2>Form Login</h2><p>Form details</p>"
+        "</article></body></html>",
+        encoding="utf-8",
+    )
+    chunks = parse_html(str(page), str(site), "6.5.x", "abc", "2026-06-06T00:00:00Z")
+    assert len(chunks) == 2
+    assert chunks[0]["title"] == "Auth"
+    assert chunks[0]["headingPath"] == ["Auth"]
+    assert "Intro" in chunks[0]["contentText"]
+    assert chunks[1]["title"] == "Form Login"
+    assert chunks[1]["headingPath"] == ["Auth", "Form Login"]
+    assert "Form details" in chunks[1]["contentText"]
+
+
+def test_parse_html_h3_uses_three_level_heading_path(tmp_path):
+    site = tmp_path / "site"
+    site.mkdir()
+    page = site / "page.html"
+    page.write_text(
+        "<html><body><article>"
+        "<h1>Auth</h1><p>Intro</p>"
+        "<h2>Username</h2><p>Username intro</p>"
+        "<h3>Form Login</h3><p>Form details</p>"
+        "</article></body></html>",
+        encoding="utf-8",
+    )
+    chunks = parse_html(str(page), str(site), "6.5.x", "abc", "2026-06-06T00:00:00Z")
+    assert len(chunks) == 3
+    assert chunks[2]["headingPath"] == ["Auth", "Username", "Form Login"]
+    assert "Form details" in chunks[2]["contentText"]
+
+
+def test_parse_html_heading_without_body_produces_no_chunk(tmp_path):
+    # A heading immediately followed by another heading has no body content
+    # and must not create a chunk (avoids empty/useless index entries).
+    site = tmp_path / "site"
+    site.mkdir()
+    page = site / "page.html"
+    page.write_text(
+        "<html><body><article>"
+        "<h1>Page</h1>"
+        "<h2>Section</h2><p>Content</p>"
+        "</article></body></html>",
+        encoding="utf-8",
+    )
+    chunks = parse_html(str(page), str(site), "6.5.x", "abc", "2026-06-06T00:00:00Z")
+    # h1 has no body → no chunk; h2 has body → 1 chunk
+    assert len(chunks) == 1
+    assert chunks[0]["title"] == "Section"
+
+
+def test_parse_html_antora_nested_sections(tmp_path):
+    # Antora wraps h2/h3 inside div.sect1/sect2. _iter_content_nodes must
+    # surface those headings rather than treating the wrapper div as content.
+    site = tmp_path / "site"
+    (site / "servlet").mkdir(parents=True)
+    page = site / "servlet" / "architecture.html"
+    page.write_text(
+        "<html><body><article>"
+        "<h1>Architecture</h1>"
+        "<div id='preamble'><p>Overview of Spring Security.</p></div>"
+        "<div class='sect1'>"
+        "  <h2>SecurityFilterChain</h2>"
+        "  <div class='sectionbody'><p>SecurityFilterChain is used by FilterChainProxy.</p></div>"
+        "</div>"
+        "<div class='sect1'>"
+        "  <h2>DelegatingFilterProxy</h2>"
+        "  <div class='sectionbody'><p>DelegatingFilterProxy bridges Servlet and Spring.</p></div>"
+        "</div>"
+        "</article></body></html>",
+        encoding="utf-8",
+    )
+    chunks = parse_html(str(page), str(site), "7.0.x", "sha1", "2026-06-06T00:00:00Z")
+    assert len(chunks) == 3
+
+    titles = [c["title"] for c in chunks]
+    assert titles == ["Architecture", "SecurityFilterChain", "DelegatingFilterProxy"]
+
+    # SecurityFilterChain must appear in the correct chunk's text
+    sfc_chunk = next(c for c in chunks if c["title"] == "SecurityFilterChain")
+    assert "SecurityFilterChain" in sfc_chunk["contentText"]
+    assert sfc_chunk["headingPath"] == ["Architecture", "SecurityFilterChain"]
+    assert sfc_chunk["area"] == "architecture"
+
+
+def test_iter_content_nodes_surfaces_nested_headings():
+    from bs4 import BeautifulSoup
+    html = (
+        "<article>"
+        "<h1>Page</h1>"
+        "<div class='sect1'><h2>Section</h2><p>body</p></div>"
+        "</article>"
+    )
+    soup = BeautifulSoup(html, "lxml")
+    article = soup.find("article")
+    nodes = list(_iter_content_nodes(article))
+    kinds = [k for k, _ in nodes]
+    assert kinds == ["h1", "h2", "content"]
 
 
 def test_api_files_excluded_from_indexing(tmp_path):
