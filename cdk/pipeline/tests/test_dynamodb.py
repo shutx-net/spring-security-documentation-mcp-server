@@ -1,6 +1,6 @@
 import boto3
 
-from indexer import _collect_stale_chunk_ids, write_chunks_dynamo, write_keywords_dynamo
+from indexer import _collect_all_chunk_ids_for_ref, write_chunks_dynamo, write_keywords_dynamo
 
 
 def test_write_chunks_dynamo(dynamodb_tables):
@@ -72,31 +72,26 @@ def test_write_keywords_dynamo_record_structure(dynamodb_tables):
     assert item["refAreaChunkId"] == "6.5.x#servlet#id1"
 
 
-def test_collect_stale_chunk_ids(dynamodb_tables):
+def test_collect_all_chunk_ids_for_ref_returns_all(dynamodb_tables):
     dynamo, chunks_table, _ = dynamodb_tables
-    chunks_table.put_item(Item={"chunkId": "old1", "ref": "6.5.x", "commitSha": "old_sha"})
-    chunks_table.put_item(Item={"chunkId": "old2", "ref": "6.5.x", "commitSha": "old_sha"})
-    chunks_table.put_item(Item={"chunkId": "new1", "ref": "6.5.x", "commitSha": "new_sha"})
-    chunks_table.put_item(Item={"chunkId": "other_ref", "ref": "7.0.x", "commitSha": "old_sha"})
+    chunks_table.put_item(Item={"chunkId": "id1", "ref": "6.5.x", "commitSha": "old_sha"})
+    chunks_table.put_item(Item={"chunkId": "id2", "ref": "6.5.x", "commitSha": "new_sha"})
+    chunks_table.put_item(Item={"chunkId": "other", "ref": "7.0.x", "commitSha": "old_sha"})
 
     table = dynamo.Table("test-chunks")
-    stale = _collect_stale_chunk_ids(table, "6.5.x", "new_sha")
-    assert set(stale) == {"old1", "old2"}
+    ids = _collect_all_chunk_ids_for_ref(table, "6.5.x")
+    assert set(ids) == {"id1", "id2"}
 
 
-def test_collect_stale_chunk_ids_none_found(dynamodb_tables):
+def test_collect_all_chunk_ids_for_ref_empty(dynamodb_tables):
     dynamo, chunks_table, _ = dynamodb_tables
-    chunks_table.put_item(Item={"chunkId": "new1", "ref": "6.5.x", "commitSha": "new_sha"})
+    table = dynamo.Table("test-chunks")
+    assert _collect_all_chunk_ids_for_ref(table, "6.5.x") == []
+
+
+def test_collect_all_chunk_ids_for_ref_ignores_other_ref(dynamodb_tables):
+    dynamo, chunks_table, _ = dynamodb_tables
+    chunks_table.put_item(Item={"chunkId": "other1", "ref": "7.0.x", "commitSha": "sha"})
 
     table = dynamo.Table("test-chunks")
-    stale = _collect_stale_chunk_ids(table, "6.5.x", "new_sha")
-    assert stale == []
-
-
-def test_collect_stale_chunk_ids_ignores_other_ref(dynamodb_tables):
-    dynamo, chunks_table, _ = dynamodb_tables
-    chunks_table.put_item(Item={"chunkId": "other1", "ref": "7.0.x", "commitSha": "old_sha"})
-
-    table = dynamo.Table("test-chunks")
-    stale = _collect_stale_chunk_ids(table, "6.5.x", "new_sha")
-    assert stale == []
+    assert _collect_all_chunk_ids_for_ref(table, "6.5.x") == []

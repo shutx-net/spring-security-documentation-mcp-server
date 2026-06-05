@@ -281,23 +281,23 @@ def write_chunks_dynamo(dynamo_resource, table_name: str, chunks: list[dict]) ->
             bw.put_item(Item=chunk)
 
 
-def _collect_stale_chunk_ids(table, ref: str, current_commit_sha: str) -> list[str]:
-    """Scan the chunks table and return chunkIds for same ref but different commitSha."""
-    stale: list[str] = []
+def _collect_all_chunk_ids_for_ref(table, ref: str) -> list[str]:
+    """Scan the chunks table and return all chunkIds for the given ref."""
+    ids: list[str] = []
     kwargs: dict = {
-        "FilterExpression": "#ref = :ref AND commitSha <> :sha",
+        "FilterExpression": "#ref = :ref",
         "ExpressionAttributeNames": {"#ref": "ref"},
-        "ExpressionAttributeValues": {":ref": ref, ":sha": current_commit_sha},
+        "ExpressionAttributeValues": {":ref": ref},
         "ProjectionExpression": "chunkId",
     }
     while True:
         resp = table.scan(**kwargs)
-        stale.extend(item["chunkId"] for item in resp.get("Items", []))
+        ids.extend(item["chunkId"] for item in resp.get("Items", []))
         last = resp.get("LastEvaluatedKey")
         if not last:
             break
         kwargs["ExclusiveStartKey"] = last
-    return stale
+    return ids
 
 
 def cleanup_stale_data(
@@ -305,16 +305,24 @@ def cleanup_stale_data(
     chunks_table_name: str, keywords_table_name: str,
     vector_index_arn: str, s3_bucket: str,
     ref: str, commit_sha: str,
+    new_chunk_ids: set[str],
 ) -> dict:
-    """Remove stale data (same ref, old commitSha) from all stores.
+    """Remove stale data for the given ref from all stores.
+
+    Stale chunks are those whose chunkId is not in new_chunk_ids — this
+    catches both old-commitSha chunks (new Spring Security release) and
+    old-format chunks (indexer logic changed, same commitSha).
+
+    commit_sha is still used to identify stale S3 build artifacts.
 
     Returns counts of deleted items per store.
     """
     chunks_table   = dynamo_resource.Table(chunks_table_name)
     keywords_table = dynamo_resource.Table(keywords_table_name)
 
-    # 1. Collect stale chunkIds once — reused by all stores.
-    stale_ids = _collect_stale_chunk_ids(chunks_table, ref, commit_sha)
+    # 1. Collect stale chunkIds: all existing IDs for ref minus the new ones.
+    all_ids  = _collect_all_chunk_ids_for_ref(chunks_table, ref)
+    stale_ids = [cid for cid in all_ids if cid not in new_chunk_ids]
     if not stale_ids:
         return {"chunks": 0, "keywords": 0, "vectors": 0, "s3_objects": 0}
 
@@ -530,10 +538,11 @@ def _run(
     print(f"[{args.ref}] Writing DynamoDB keywords ...")
     write_keywords_dynamo(clients["dynamodb"], keywords_table, all_chunks)
     print(f"[{args.ref}] Removing stale data ...")
+    new_chunk_ids = {c["chunkId"] for c in all_chunks}
     removed = cleanup_stale_data(
         clients["dynamodb"], clients["s3"], clients["s3vectors"],
         chunks_table, keywords_table, vector_index, content_bucket,
-        args.ref, args.commit_sha,
+        args.ref, args.commit_sha, new_chunk_ids,
     )
     print(f"[{args.ref}] Removed — chunks:{removed['chunks']} keywords:{removed['keywords']} vectors:{removed['vectors']} s3:{removed['s3_objects']}")
 
