@@ -29,7 +29,7 @@
             "requestsPerTarget": 500
         },
 
-        "schedule": "cron(0 15 * * ? *)",
+        "schedule": "rate(10 days)",
         "scheduleTimezone": "UTC",
 
         "cloudflare": {
