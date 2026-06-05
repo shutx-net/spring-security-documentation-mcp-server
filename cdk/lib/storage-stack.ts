@@ -5,6 +5,7 @@ import {
   Duration,
   CfnOutput,
   aws_dynamodb as dynamodb,
+  aws_ecr as ecr,
   aws_s3 as s3,
   aws_s3vectors as s3vectors,
   aws_ssm as ssm,
@@ -29,6 +30,7 @@ export class StorageStack extends Stack {
   public readonly vectorIndex: s3vectors.CfnIndex;
   public readonly tables: DocTables;
   public readonly chunksTableGsiName = 'ref-commitSha-index';
+  public readonly indexerRepository: ecr.Repository;
 
   constructor(scope: Construct, id: string, props: StorageStackProps) {
     super(scope, id, { ...props, terminationProtection: true });
@@ -67,6 +69,15 @@ export class StorageStack extends Stack {
       },
     });
     this.vectorIndex.addDependency(this.vectorBucket);
+
+    this.indexerRepository = new ecr.Repository(this, 'IndexerImageRepo', {
+      imageScanOnPush: true,
+      encryption: ecr.RepositoryEncryption.AES_256,
+      removalPolicy: RemovalPolicy.RETAIN,
+      lifecycleRules: [
+        { maxImageCount: 5, description: 'Retain the 5 most recent images' },
+      ],
+    });
 
     const chunks = new dynamodb.Table(this, 'DocChunksTable', {
       partitionKey: { name: 'chunkId', type: dynamodb.AttributeType.STRING },
@@ -147,5 +158,6 @@ export class StorageStack extends Stack {
     new CfnOutput(this, 'ContentBucketName', { value: this.contentBucket.bucketName });
     new CfnOutput(this, 'VectorBucketName', { value: this.vectorBucket.ref });
     new CfnOutput(this, 'VectorIndexName', { value: this.vectorIndex.ref });
+    new CfnOutput(this, 'IndexerRepositoryUri', { value: this.indexerRepository.repositoryUri });
   }
 }
