@@ -10,7 +10,8 @@ from indexer import (
 
 
 def test_detect_area_servlet():
-    assert _detect_area("/site/servlet/authentication.html") == "servlet"
+    # Use a filename that is not itself an area key ("csrf" is not in AREA_PREFIXES)
+    assert _detect_area("/site/servlet/csrf.html") == "servlet"
 
 
 def test_detect_area_oauth2():
@@ -23,6 +24,30 @@ def test_detect_area_method_security():
 
 def test_detect_area_unknown():
     assert _detect_area("/site/index.html") == "other"
+
+
+# Versioned Antora paths: oauth2/saml2/architecture docs live under servlet/
+# in the actual Spring Security site structure. The most specific directory
+# component must win over the shallower "servlet" prefix.
+def test_detect_area_oauth2_nested_under_servlet():
+    assert _detect_area("/site/6.5-SNAPSHOT/servlet/oauth2/login/core.html") == "oauth2"
+
+
+def test_detect_area_saml2_nested_under_servlet():
+    assert _detect_area("/site/6.5-SNAPSHOT/servlet/saml2/login/overview.html") == "saml2"
+
+
+def test_detect_area_architecture_nested_under_servlet():
+    assert _detect_area("/site/6.5-SNAPSHOT/servlet/architecture.html") == "architecture"
+
+
+def test_detect_area_method_security_under_native_image():
+    assert _detect_area("/site/7.0-SNAPSHOT/native-image/method-security.html") == "method-security"
+
+
+def test_detect_area_servlet_non_specific_page():
+    # Pages without a more specific area component stay as "servlet"
+    assert _detect_area("/site/6.5-SNAPSHOT/servlet/exploits/csrf.html") == "servlet"
 
 
 def test_canonical_url():
