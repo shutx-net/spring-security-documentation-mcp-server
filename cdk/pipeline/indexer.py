@@ -152,7 +152,7 @@ def parse_html(html_path: str, site_dir: str, ref: str, commit_sha: str, built_a
     chunks: list[dict] = []
 
     def flush() -> None:
-        if html_parts and current_headings:
+        if html_parts and text_parts and current_headings:
             chunks.append({
                 "chunkId":     _chunk_id(ref, commit_sha, canonical_url, current_headings),
                 "ref":         ref,
