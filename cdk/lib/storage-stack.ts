@@ -28,6 +28,7 @@ export class StorageStack extends Stack {
   public readonly vectorBucket: s3vectors.CfnVectorBucket;
   public readonly vectorIndex: s3vectors.CfnIndex;
   public readonly tables: DocTables;
+  public readonly chunksTableGsiName = 'ref-commitSha-index';
 
   constructor(scope: Construct, id: string, props: StorageStackProps) {
     super(scope, id, { ...props, terminationProtection: true });
@@ -75,6 +76,13 @@ export class StorageStack extends Stack {
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
     });
 
+    chunks.addGlobalSecondaryIndex({
+      indexName: this.chunksTableGsiName,
+      partitionKey: { name: 'ref', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'commitSha', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.KEYS_ONLY,
+    });
+
     const keywords = new dynamodb.Table(this, 'DocKeywordsTable', {
       partitionKey: { name: 'keyword', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'refAreaChunkId', type: dynamodb.AttributeType.STRING },
@@ -118,6 +126,10 @@ export class StorageStack extends Stack {
     new ssm.StringParameter(this, 'ParamChunksTable', {
       parameterName: `${paramPrefix}/dynamodb/chunks-table-name`,
       stringValue: chunks.tableName,
+    });
+    new ssm.StringParameter(this, 'ParamChunksTableGsiName', {
+      parameterName: `${paramPrefix}/dynamodb/chunks-table-gsi-name`,
+      stringValue: this.chunksTableGsiName,
     });
     new ssm.StringParameter(this, 'ParamKeywordsTable', {
       parameterName: `${paramPrefix}/dynamodb/keywords-table-name`,
