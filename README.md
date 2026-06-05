@@ -5,6 +5,8 @@
   <img src="https://img.shields.io/badge/status-experimental-orange" alt="Status: Experimental">
   <img src="https://img.shields.io/badge/MCP-Streamable%20HTTP-purple" alt="MCP: Streamable HTTP">
   <img src="https://img.shields.io/badge/Go-1.26.3-00ADD8?logo=go&logoColor=white" alt="Go 1.26.3">
+  <a href="https://github.com/shutx-net/spring-security-documentation-mcp-server/actions/workflows/ecr-push.yml"><img src="https://github.com/shutx-net/spring-security-documentation-mcp-server/actions/workflows/ecr-push.yml/badge.svg" alt="Build and Push to ECR"></a>
+  <a href="https://github.com/shutx-net/spring-security-documentation-mcp-server/actions/workflows/indexer-ecr-push.yml"><img src="https://github.com/shutx-net/spring-security-documentation-mcp-server/actions/workflows/indexer-ecr-push.yml/badge.svg" alt="Build and Push Indexer to ECR"></a>
 </p>
 
 > [!IMPORTANT]
