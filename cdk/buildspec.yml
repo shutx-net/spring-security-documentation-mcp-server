@@ -1,54 +1,41 @@
 version: 0.2
 
-# Static config. Dynamic values (bucket names, table names) are injected by CDK
-# as CodeBuild environment variables at deploy time.
+# REF and COMMIT_SHA are injected by Step Functions (CodeBuildStartBuild env override).
+# CONTENT_BUCKET is set as a static CodeBuild environment variable by CDK.
 env:
   variables:
     SPRING_SECURITY_REPO: "https://github.com/spring-projects/spring-security.git"
-    TARGET_REFS: "6.5.x 7.0.x"
-    PIP_CACHE_DIR: "/root/.cache/pip"
-    GRADLE_USER_HOME: "/root/.gradle"
+    REF: ""
+    COMMIT_SHA: ""
 
 phases:
   install:
     runtime-versions:
       java: corretto21
       nodejs: 20
-      python: 3.12
-    commands:
-      - pip install --cache-dir "$PIP_CACHE_DIR" -r cdk/pipeline/requirements.txt
 
   build:
     on-failure: ABORT
     commands:
       - |
         set -eu
-        for REF in $TARGET_REFS; do
-          echo "===== [$(date -u '+%Y-%m-%dT%H:%M:%SZ')] Processing ref: $REF ====="
-
-          # --- Phase 1: Clone + Antora Build ---
-          CLONE_DIR="/tmp/spring-security-${REF}"
-          git clone --depth 1 --branch "$REF" "$SPRING_SECURITY_REPO" "$CLONE_DIR"
-          COMMIT_SHA=$(git -C "$CLONE_DIR" rev-parse HEAD)
-          echo "Cloned $REF @ $COMMIT_SHA"
-          (cd "$CLONE_DIR" && ./gradlew --no-daemon -PbuildSrc.skipTests=true :spring-security-docs:antora)
-          SITE_DIR="${CLONE_DIR}/docs/build/site"
-
-          # --- Phase 2: Parse / Embed / Publish ---
-          python cdk/pipeline/indexer.py \
-            --site-dir    "$SITE_DIR"   \
-            --ref         "$REF"        \
-            --commit-sha  "$COMMIT_SHA"
-
-          echo "===== [$(date -u '+%Y-%m-%dT%H:%M:%SZ')] Completed: $REF ====="
-        done
+        CLONE_DIR="/tmp/spring-security-${REF}"
+        echo "=== Cloning spring-security branch ${REF} ==="
+        git clone --depth 1 --branch "$REF" "$SPRING_SECURITY_REPO" "$CLONE_DIR"
+        echo "=== Running Antora build ==="
+        (cd "$CLONE_DIR" && ./gradlew --no-daemon -PbuildSrc.skipTests=true :spring-security-docs:antora)
+        ARTIFACT_KEY="artifacts/${REF}/${COMMIT_SHA}/site.tar.gz"
+        echo "=== Packaging site ==="
+        tar -czf /tmp/site.tar.gz -C "${CLONE_DIR}/docs/build/site" .
+        echo "=== Uploading to s3://${CONTENT_BUCKET}/${ARTIFACT_KEY} ==="
+        aws s3 cp /tmp/site.tar.gz "s3://${CONTENT_BUCKET}/${ARTIFACT_KEY}"
+        echo "=== Done: ${REF} @ ${COMMIT_SHA} ==="
 
   post_build:
     commands:
-      - echo "All refs processed at $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+      - echo "Antora build completed at $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 cache:
   paths:
     - /root/.gradle/caches/**/*
     - /root/.gradle/wrapper/dists/**/*
-    - /root/.cache/pip/**/*

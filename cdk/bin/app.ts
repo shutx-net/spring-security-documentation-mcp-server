@@ -51,12 +51,16 @@ if (config.domain) {
 const pipeline = new PipelineStack(app, `${prefix}-pipeline`, {
   env,
   config,
+  vpc: network.vpc,
   contentBucket: storage.contentBucket,
   vectorBucket: storage.vectorBucket,
   vectorIndex: storage.vectorIndex,
   tables: storage.tables,
+  chunksTableGsiName: storage.chunksTableGsiName,
+  indexerRepository: storage.indexerRepository,
 });
 pipeline.addDependency(storage);
+pipeline.addDependency(network);
 
 cdk.Tags.of(app).add('app', config.appName);
 cdk.Tags.of(app).add('managed-by', 'cdk');
