@@ -518,6 +518,18 @@ def _run(
     all_chunks: list[dict] = []
     for html_path in html_files:
         all_chunks.extend(parse_html(str(html_path), site_dir, args.ref, args.commit_sha, built_at))
+
+    # Deduplicate by chunkId: same URL + same headingPath → same hash.
+    # Duplicate headings on one page produce identical IDs; keep the first.
+    seen_ids: set[str] = set()
+    deduped: list[dict] = []
+    for chunk in all_chunks:
+        if chunk["chunkId"] not in seen_ids:
+            seen_ids.add(chunk["chunkId"])
+            deduped.append(chunk)
+    if len(deduped) < len(all_chunks):
+        print(f"[{args.ref}] Deduplicated {len(all_chunks) - len(deduped)} duplicate chunkIds")
+    all_chunks = deduped
     print(f"[{args.ref}] Generated {len(all_chunks)} chunks")
 
     if not all_chunks:
