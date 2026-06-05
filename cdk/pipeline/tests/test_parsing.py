@@ -280,6 +280,26 @@ def test_iter_content_nodes_surfaces_nested_headings():
     assert kinds == ["h1", "h2", "content"]
 
 
+def test_parse_html_duplicate_headings_produce_duplicate_chunk_ids(tmp_path):
+    # Pages with two h2 sections of the same text produce duplicate chunkIds.
+    # _run deduplicates them; this test documents the known behaviour so the
+    # dedup logic can be verified against real input shape.
+    site = tmp_path / "site"
+    site.mkdir()
+    page = site / "page.html"
+    page.write_text(
+        "<html><body><article>"
+        "<h1>Auth</h1>"
+        "<h2>Overview</h2><p>First overview.</p>"
+        "<h2>Overview</h2><p>Second overview.</p>"
+        "</article></body></html>",
+        encoding="utf-8",
+    )
+    chunks = parse_html(str(page), str(site), "6.5.x", "abc", "2026-06-06T00:00:00Z")
+    ids = [c["chunkId"] for c in chunks]
+    assert len(ids) != len(set(ids)), "expected duplicate chunkIds for identical headings"
+
+
 def test_api_files_excluded_from_indexing(tmp_path):
     site = tmp_path / "site"
     (site / "api" / "java").mkdir(parents=True)
