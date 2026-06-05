@@ -121,6 +121,7 @@ export class NetworkStack extends Stack {
       ['EcrApiEndpoint', ec2.InterfaceVpcEndpointAwsService.ECR],
       ['EcrDkrEndpoint', ec2.InterfaceVpcEndpointAwsService.ECR_DOCKER],
       ['CloudWatchLogsEndpoint', ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS],
+      ['S3VectorsEndpoint', ec2.InterfaceVpcEndpointAwsService.S3_VECTORS],
     ];
 
     for (const [logicalId, service] of interfaceEndpoints) {
