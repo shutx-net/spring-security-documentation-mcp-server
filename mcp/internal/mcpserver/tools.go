@@ -27,9 +27,10 @@ type chunkSnippet struct {
 	CanonicalURL string       `json:"canonical_url"`
 	Title        string       `json:"title"`
 	HeadingPath  []string     `json:"heading_path"`
-	Area         model.Area   `json:"area"`
-	ContentText  string       `json:"content_text"`
-	Truncated    bool         `json:"truncated,omitempty"`
+	Area         model.Area    `json:"area"`
+	DocType      model.DocType `json:"doc_type"`
+	ContentText  string        `json:"content_text"`
+	Truncated    bool          `json:"truncated,omitempty"`
 }
 
 func toSnippet(c model.DocChunk) chunkSnippet {
@@ -49,6 +50,7 @@ func toSnippet(c model.DocChunk) chunkSnippet {
 		Title:       c.Title,
 		HeadingPath: c.HeadingPath,
 		Area:        c.Area,
+		DocType:     c.DocType,
 		ContentText: text,
 		Truncated:   truncated,
 	}

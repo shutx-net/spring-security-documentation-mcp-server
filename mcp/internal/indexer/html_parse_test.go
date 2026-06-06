@@ -89,6 +89,24 @@ func TestChunkID(t *testing.T) {
 	}
 }
 
+func TestInferDocType(t *testing.T) {
+	cases := []struct {
+		path string
+		want model.DocType
+	}{
+		{"api/java/org/springframework/security/Foo.html", model.DocTypeAPI},
+		{"api/index.html", model.DocTypeAPI},
+		{"servlet/authentication.html", model.DocTypeReference},
+		{"index.html", model.DocTypeReference},
+	}
+	for _, tc := range cases {
+		got := inferDocType(tc.path)
+		if got != tc.want {
+			t.Errorf("inferDocType(%q) = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}
+
 func TestInferArea(t *testing.T) {
 	cases := []struct {
 		path string

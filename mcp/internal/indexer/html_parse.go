@@ -49,6 +49,7 @@ func ParseHTML(r io.Reader, opts ParseOptions) ([]model.DocChunk, error) {
 	}
 
 	area := inferArea(opts.SourcePath)
+	docType := inferDocType(opts.SourcePath)
 
 	var chunks []model.DocChunk
 	var currentHeadings []string // [h1, h2, h3] stack
@@ -86,6 +87,7 @@ func ParseHTML(r io.Reader, opts ParseOptions) ([]model.DocChunk, error) {
 			Title:       title,
 			HeadingPath: append([]string{}, headingPath...),
 			Area:        area,
+			DocType:     docType,
 			ContentHtml: contentHtml,
 			ContentText: contentText,
 			IndexedAt:   time.Now().UTC(),
