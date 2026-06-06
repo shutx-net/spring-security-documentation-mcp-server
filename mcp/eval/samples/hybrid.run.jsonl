@@ -1,0 +1,8 @@
+{"runId":"hybrid","topicId":"SS-001","rank":1,"chunkId":"chunk-a","score":12.45}
+{"runId":"hybrid","topicId":"SS-001","rank":2,"chunkId":"chunk-b","score":10.23}
+{"runId":"hybrid","topicId":"SS-001","rank":3,"chunkId":"chunk-c","score":8.76}
+{"runId":"hybrid","topicId":"SS-001","rank":4,"chunkId":"chunk-x","score":5.00}
+{"runId":"hybrid","topicId":"SS-001","rank":5,"chunkId":"chunk-y","score":4.00}
+{"runId":"hybrid","topicId":"SS-002","rank":1,"chunkId":"chunk-d","score":9.00}
+{"runId":"hybrid","topicId":"SS-002","rank":2,"chunkId":"chunk-e","score":7.00}
+{"runId":"hybrid","topicId":"SS-002","rank":3,"chunkId":"chunk-f","score":6.00}
