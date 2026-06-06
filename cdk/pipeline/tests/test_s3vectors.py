@@ -6,7 +6,7 @@ _INDEX_ARN = "arn:aws:s3vectors:ap-northeast-1:123456789012:bucket/test/index/id
 
 
 def _chunks(n: int) -> list[dict]:
-    return [{"chunkId": f"id{i}", "ref": "6.5.x", "area": "servlet"} for i in range(n)]
+    return [{"chunkId": f"id{i}", "ref": "6.5.x", "area": "servlet", "docType": "reference"} for i in range(n)]
 
 
 def _embeddings(n: int) -> list[list[float]]:
@@ -32,6 +32,7 @@ def test_put_vectors_vector_structure():
     assert len(v["data"]["float32"]) == 1024
     assert v["metadata"]["ref"] == "6.5.x"
     assert v["metadata"]["area"] == "servlet"
+    assert v["metadata"]["docType"] == "reference"
     assert v["metadata"]["chunkId"] == "id0"
 
 
