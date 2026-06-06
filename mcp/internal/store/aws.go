@@ -154,11 +154,19 @@ func (s *AWSStore) GetChunk(ctx context.Context, id string) (model.DocChunk, err
 	return fromItem(item), nil
 }
 
+// looksLikeIdentifier returns true when the query looks like a code identifier,
+// class name, or annotation rather than a natural-language question.
+// Single-token queries (no whitespace) are treated as identifiers because
+// constructs like SecurityFilterChain, @PreAuthorize, and oauth2ResourceServer
+// match the keywords table better than semantic vector search.
+func looksLikeIdentifier(query string) bool {
+	return !strings.ContainsAny(query, " \t\n")
+}
+
 // Search returns chunks matching the query.
-// Runs up to three searches concurrently and merges results in priority order:
-//  1. vector search (semantic, via Bedrock + S3 Vectors)
-//  2. keywords table search (exact keyword lookup, O(1))
-//  3. keyword scan (contains() filter on contentText, fallback)
+// Runs up to three searches concurrently and merges results in priority order.
+// For identifier-like queries (no whitespace), keywords table results take priority
+// over vector results. For natural-language queries, vector results take priority.
 func (s *AWSStore) Search(ctx context.Context, params model.SearchParams) (model.SearchResult, error) {
 	limit := params.Limit
 	if limit <= 0 || limit > 20 {
@@ -214,6 +222,9 @@ func (s *AWSStore) Search(ctx context.Context, params model.SearchParams) (model
 		return model.SearchResult{}, fmt.Errorf("search failed: %w", kr.err)
 	}
 
+	if looksLikeIdentifier(params.Query) {
+		return model.SearchResult{Chunks: mergeSearchResults(limit, ktr.chunks, vr.chunks, kr.chunks)}, nil
+	}
 	return model.SearchResult{Chunks: mergeSearchResults(limit, vr.chunks, ktr.chunks, kr.chunks)}, nil
 }
 
