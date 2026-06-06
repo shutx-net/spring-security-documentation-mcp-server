@@ -2,6 +2,14 @@ package model
 
 import "time"
 
+// DocType represents the kind of documentation a chunk comes from.
+type DocType string
+
+const (
+	DocTypeReference DocType = "reference"
+	DocTypeAPI       DocType = "api"
+)
+
 // Area represents a Spring Security documentation area.
 type Area string
 
@@ -43,7 +51,8 @@ type DocChunk struct {
 	Title        string
 	HeadingPath  []string // e.g. ["Authentication", "Username/Password", "Form Login"]
 
-	Area Area
+	Area    Area
+	DocType DocType
 
 	ContentHtml string // raw HTML fragment of the chunk body
 	ContentText string // plain text extracted for FTS and Embedding

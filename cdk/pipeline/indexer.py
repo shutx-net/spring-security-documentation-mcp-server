@@ -124,6 +124,11 @@ def _detect_area(html_path: str) -> str:
     return "other"
 
 
+def _detect_doc_type(html_path: str, site_dir: str) -> str:
+    rel = Path(html_path).relative_to(site_dir)
+    return "api" if rel.parts[0] == "api" else "reference"
+
+
 def _canonical_url(html_path: str, site_dir: str) -> str:
     rel = Path(html_path).relative_to(site_dir)
     return f"https://docs.spring.io/spring-security/reference/{rel}"
@@ -159,6 +164,7 @@ def parse_html(html_path: str, site_dir: str, ref: str, commit_sha: str, built_a
         soup = BeautifulSoup(f, "lxml")
 
     area = _detect_area(html_path)
+    doc_type = _detect_doc_type(html_path, site_dir)
     canonical_url = _canonical_url(html_path, site_dir)
     source_path = str(Path(html_path).relative_to(site_dir))
 
@@ -185,6 +191,7 @@ def parse_html(html_path: str, site_dir: str, ref: str, commit_sha: str, built_a
                     "commitSha":   commit_sha,
                     "builtAt":     built_at,
                     "area":        area,
+                    "docType":     doc_type,
                     "title":       current_headings[-1],
                     "headingPath": list(current_headings),
                     "canonicalUrl": canonical_url,
@@ -235,6 +242,7 @@ def parse_html(html_path: str, site_dir: str, ref: str, commit_sha: str, built_a
                 "commitSha":   commit_sha,
                 "builtAt":     built_at,
                 "area":        area,
+                "docType":     doc_type,
                 "title":       fallback_title,
                 "headingPath": [fallback_title],
                 "canonicalUrl": canonical_url,
@@ -282,6 +290,7 @@ def put_vectors(s3vectors_client, vector_index_arn: str,
             "metadata": {
                 "ref":     chunk["ref"],
                 "area":    chunk["area"],
+                "docType": chunk["docType"],
                 "chunkId": chunk["chunkId"],
             },
         }
@@ -537,9 +546,8 @@ def _run(
 ) -> None:
     # 1. Parse HTML → chunks
     site_path  = Path(site_dir)
-    all_html   = sorted(site_path.rglob("*.html"))
-    html_files = [f for f in all_html if "api" not in f.relative_to(site_dir).parts]
-    print(f"[{args.ref}] Found {len(html_files)} HTML files (skipped {len(all_html) - len(html_files)} api/ files)")
+    html_files = sorted(site_path.rglob("*.html"))
+    print(f"[{args.ref}] Found {len(html_files)} HTML files")
 
     all_chunks: list[dict] = []
     for html_path in html_files:

@@ -176,7 +176,13 @@ func (s *AWSStore) Search(ctx context.Context, params model.SearchParams) (model
 	// Fast path: neither semantic nor keyword-table search configured.
 	if s.embedder == nil && s.config.KeywordsTable == "" {
 		chunks, err := s.keywordSearch(ctx, params, limit)
-		return model.SearchResult{Chunks: chunks}, err
+		if err != nil {
+			return model.SearchResult{}, err
+		}
+		if !looksLikeIdentifier(params.Query) {
+			chunks = reorderByDocType(chunks)
+		}
+		return model.SearchResult{Chunks: chunks}, nil
 	}
 
 	type searchResult struct {
@@ -222,10 +228,21 @@ func (s *AWSStore) Search(ctx context.Context, params model.SearchParams) (model
 		return model.SearchResult{}, fmt.Errorf("search failed: %w", kr.err)
 	}
 
+	var merged []model.DocChunk
 	if looksLikeIdentifier(params.Query) {
-		return model.SearchResult{Chunks: mergeSearchResults(limit, ktr.chunks, vr.chunks, kr.chunks)}, nil
+		merged = mergeSearchResults(limit, ktr.chunks, vr.chunks, kr.chunks)
+	} else {
+		// Merge the full pool before limiting so reorderByDocType can promote
+		// reference chunks that would otherwise be displaced by api chunks.
+		poolLimit := len(vr.chunks) + len(ktr.chunks) + len(kr.chunks)
+		pool := mergeSearchResults(poolLimit, vr.chunks, ktr.chunks, kr.chunks)
+		pool = reorderByDocType(pool)
+		if len(pool) > limit {
+			pool = pool[:limit]
+		}
+		merged = pool
 	}
-	return model.SearchResult{Chunks: mergeSearchResults(limit, vr.chunks, ktr.chunks, kr.chunks)}, nil
+	return model.SearchResult{Chunks: merged}, nil
 }
 
 // keywordSearch performs a DynamoDB Scan with a contains() filter on contentText.
@@ -408,6 +425,19 @@ func (s *AWSStore) keywordsTableSearch(ctx context.Context, params model.SearchP
 	return s.batchGetChunks(ctx, ids)
 }
 
+// reorderByDocType moves api chunks to the end, preserving relative order within each group.
+func reorderByDocType(chunks []model.DocChunk) []model.DocChunk {
+	var refs, apis []model.DocChunk
+	for _, c := range chunks {
+		if c.DocType == model.DocTypeAPI {
+			apis = append(apis, c)
+		} else {
+			refs = append(refs, c)
+		}
+	}
+	return append(refs, apis...)
+}
+
 // mergeSearchResults deduplicates and merges results from multiple sources in priority order.
 func mergeSearchResults(limit int, sources ...[]model.DocChunk) []model.DocChunk {
 	seen := make(map[string]struct{})
@@ -566,6 +596,7 @@ type chunkItem struct {
 	Title        string   `dynamodbav:"title"`
 	HeadingPath  []string `dynamodbav:"headingPath"`
 	Area         string   `dynamodbav:"area"`
+	DocType      string   `dynamodbav:"docType"`
 	ContentHtml  string   `dynamodbav:"contentHtml"`
 	ContentText  string   `dynamodbav:"contentText"`
 	IndexedAt    string   `dynamodbav:"indexedAt"`
@@ -585,6 +616,7 @@ func toItem(c model.DocChunk) chunkItem {
 		Title:        c.Title,
 		HeadingPath:  c.HeadingPath,
 		Area:         string(c.Area),
+		DocType:      string(c.DocType),
 		ContentHtml:  c.ContentHtml,
 		ContentText:  c.ContentText,
 		IndexedAt:    c.IndexedAt.UTC().Format(time.RFC3339),
@@ -607,6 +639,7 @@ func fromItem(ci chunkItem) model.DocChunk {
 		Title:        ci.Title,
 		HeadingPath:  ci.HeadingPath,
 		Area:         model.Area(ci.Area),
+		DocType:      model.DocType(ci.DocType),
 		ContentHtml:  ci.ContentHtml,
 		ContentText:  ci.ContentText,
 		IndexedAt:    indexedAt,

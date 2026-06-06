@@ -5,6 +5,7 @@ from indexer import (
     _canonical_url,
     _chunk_id,
     _detect_area,
+    _detect_doc_type,
     _iter_content_nodes,
     _strip_boilerplate,
     parse_html,
@@ -301,18 +302,50 @@ def test_parse_html_duplicate_headings_produce_duplicate_chunk_ids(tmp_path):
     assert len(ids) != len(set(ids)), "expected duplicate chunkIds for identical headings"
 
 
-def test_api_files_excluded_from_indexing(tmp_path):
+def test_detect_doc_type_api(tmp_path):
     site = tmp_path / "site"
     (site / "api" / "java").mkdir(parents=True)
+    html = site / "api" / "java" / "Foo.html"
+    html.write_text("x", encoding="utf-8")
+    assert _detect_doc_type(str(html), str(site)) == "api"
+
+
+def test_detect_doc_type_reference(tmp_path):
+    site = tmp_path / "site"
     (site / "servlet").mkdir(parents=True)
-    (site / "api" / "java" / "Foo.html").write_text("x", encoding="utf-8")
-    (site / "servlet" / "auth.html").write_text("x", encoding="utf-8")
+    html = site / "servlet" / "auth.html"
+    html.write_text("x", encoding="utf-8")
+    assert _detect_doc_type(str(html), str(site)) == "reference"
 
-    all_html = sorted(site.rglob("*.html"))
-    html_files = [f for f in all_html if "api" not in f.relative_to(site).parts]
 
-    assert len(html_files) == 1
-    assert html_files[0].name == "auth.html"
+def test_api_files_indexed_as_api_doc_type(tmp_path):
+    site = tmp_path / "site"
+    (site / "api" / "java").mkdir(parents=True)
+    (site / "api" / "java" / "BCryptPasswordEncoder.html").write_text(
+        "<html><body><article><h1>BCryptPasswordEncoder</h1><p>Encodes passwords.</p></article></body></html>",
+        encoding="utf-8",
+    )
+    chunks = parse_html(
+        str(site / "api" / "java" / "BCryptPasswordEncoder.html"),
+        str(site), "6.5.x", "abc123", "2026-06-07T00:00:00Z",
+    )
+    assert len(chunks) >= 1
+    assert all(c["docType"] == "api" for c in chunks)
+
+
+def test_reference_files_indexed_as_reference_doc_type(tmp_path):
+    site = tmp_path / "site"
+    (site / "servlet").mkdir(parents=True)
+    (site / "servlet" / "auth.html").write_text(
+        "<html><body><article><h1>Authentication</h1><p>Intro.</p></article></body></html>",
+        encoding="utf-8",
+    )
+    chunks = parse_html(
+        str(site / "servlet" / "auth.html"),
+        str(site), "6.5.x", "abc123", "2026-06-07T00:00:00Z",
+    )
+    assert len(chunks) >= 1
+    assert all(c["docType"] == "reference" for c in chunks)
 
 
 # ---------------------------------------------------------------------------
