@@ -58,9 +58,12 @@ func (s *MemoryStore) Search(_ context.Context, params model.SearchParams) (mode
 			continue
 		}
 		result.Chunks = append(result.Chunks, c)
-		if len(result.Chunks) >= limit {
-			break
-		}
+	}
+	if !looksLikeIdentifier(params.Query) {
+		result.Chunks = reorderByDocType(result.Chunks)
+	}
+	if len(result.Chunks) > limit {
+		result.Chunks = result.Chunks[:limit]
 	}
 	return result, nil
 }

@@ -20,6 +20,14 @@ func chunkID(ref, commitSha, canonicalURL string, headingPath []string) string {
 	return fmt.Sprintf("%x", h[:16])
 }
 
+// inferDocType returns DocTypeAPI for paths under api/, DocTypeReference otherwise.
+func inferDocType(sourcePath string) model.DocType {
+	if strings.HasPrefix(sourcePath, "api/") {
+		return model.DocTypeAPI
+	}
+	return model.DocTypeReference
+}
+
 // inferArea maps a URL path to a documentation area based on the first path component.
 func inferArea(sourcePath string) model.Area {
 	top := strings.ToLower(strings.SplitN(sourcePath, "/", 2)[0])

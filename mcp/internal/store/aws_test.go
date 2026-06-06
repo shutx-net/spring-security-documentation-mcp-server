@@ -9,6 +9,10 @@ import (
 
 func chunk(id string) model.DocChunk { return model.DocChunk{ID: id} }
 
+func chunkWithDocType(id string, dt model.DocType) model.DocChunk {
+	return model.DocChunk{ID: id, DocType: dt}
+}
+
 func TestMergeSearchResults_PriorityOrder(t *testing.T) {
 	vector  := []model.DocChunk{chunk("v1"), chunk("v2")}
 	kwTable := []model.DocChunk{chunk("kt1"), chunk("v1")} // v1 duplicate
@@ -83,6 +87,53 @@ func TestMergeSearchResults_IdentifierPriority(t *testing.T) {
 	if len(got) != len(want) {
 		t.Fatalf("len=%d want %d", len(got), len(want))
 	}
+	for i, c := range got {
+		if c.ID != want[i] {
+			t.Errorf("pos %d: got %q want %q", i, c.ID, want[i])
+		}
+	}
+}
+
+func TestReorderByDocType_APIMovedToEnd(t *testing.T) {
+	chunks := []model.DocChunk{
+		chunkWithDocType("ref1", model.DocTypeReference),
+		chunkWithDocType("api1", model.DocTypeAPI),
+		chunkWithDocType("ref2", model.DocTypeReference),
+		chunkWithDocType("api2", model.DocTypeAPI),
+	}
+	got := reorderByDocType(chunks)
+	want := []string{"ref1", "ref2", "api1", "api2"}
+	if len(got) != len(want) {
+		t.Fatalf("len=%d want %d", len(got), len(want))
+	}
+	for i, c := range got {
+		if c.ID != want[i] {
+			t.Errorf("pos %d: got %q want %q", i, c.ID, want[i])
+		}
+	}
+}
+
+func TestReorderByDocType_AllReference(t *testing.T) {
+	chunks := []model.DocChunk{
+		chunkWithDocType("ref1", model.DocTypeReference),
+		chunkWithDocType("ref2", model.DocTypeReference),
+	}
+	got := reorderByDocType(chunks)
+	want := []string{"ref1", "ref2"}
+	for i, c := range got {
+		if c.ID != want[i] {
+			t.Errorf("pos %d: got %q want %q", i, c.ID, want[i])
+		}
+	}
+}
+
+func TestReorderByDocType_AllAPI(t *testing.T) {
+	chunks := []model.DocChunk{
+		chunkWithDocType("api1", model.DocTypeAPI),
+		chunkWithDocType("api2", model.DocTypeAPI),
+	}
+	got := reorderByDocType(chunks)
+	want := []string{"api1", "api2"}
 	for i, c := range got {
 		if c.ID != want[i] {
 			t.Errorf("pos %d: got %q want %q", i, c.ID, want[i])
