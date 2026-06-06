@@ -49,6 +49,47 @@ func TestMergeSearchResults_AllDuplicates(t *testing.T) {
 	}
 }
 
+func TestLooksLikeIdentifier(t *testing.T) {
+	cases := []struct {
+		query string
+		want  bool
+	}{
+		{"SecurityFilterChain", true},
+		{"SecurityWebFilterChain", true},
+		{"@PreAuthorize", true},
+		{"@WithMockUser", true},
+		{"JwtDecoder", true},
+		{"oauth2ResourceServer", true},
+		{"csrf", true},
+		{"how to configure method security", false},
+		{"how to disable csrf", false},
+		{"spring security testing mock user", false},
+	}
+	for _, tc := range cases {
+		if got := looksLikeIdentifier(tc.query); got != tc.want {
+			t.Errorf("looksLikeIdentifier(%q) = %v, want %v", tc.query, got, tc.want)
+		}
+	}
+}
+
+func TestMergeSearchResults_IdentifierPriority(t *testing.T) {
+	vr  := []model.DocChunk{chunk("v1"), chunk("v2")}
+	ktr := []model.DocChunk{chunk("kt1"), chunk("v1")} // v1 duplicate
+	kr  := []model.DocChunk{chunk("k1")}
+
+	// identifier query: ktr before vr
+	got := mergeSearchResults(5, ktr, vr, kr)
+	want := []string{"kt1", "v1", "v2", "k1"}
+	if len(got) != len(want) {
+		t.Fatalf("len=%d want %d", len(got), len(want))
+	}
+	for i, c := range got {
+		if c.ID != want[i] {
+			t.Errorf("pos %d: got %q want %q", i, c.ID, want[i])
+		}
+	}
+}
+
 func TestAWSConfigFromEnv_KeywordsTable(t *testing.T) {
 	t.Setenv("CHUNKS_TABLE", "chunks")
 	t.Setenv("KEYWORDS_TABLE", "keywords")
