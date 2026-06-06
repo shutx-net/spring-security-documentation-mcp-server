@@ -22,8 +22,10 @@ func chunkID(ref, commitSha, canonicalURL string, headingPath []string) string {
 
 // inferDocType returns DocTypeAPI for paths under api/, DocTypeReference otherwise.
 func inferDocType(sourcePath string) model.DocType {
-	if strings.HasPrefix(sourcePath, "api/") {
-		return model.DocTypeAPI
+	for _, part := range strings.Split(sourcePath, "/") {
+		if part == "api" {
+			return model.DocTypeAPI
+		}
 	}
 	return model.DocTypeReference
 }

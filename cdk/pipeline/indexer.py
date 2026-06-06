@@ -126,7 +126,7 @@ def _detect_area(html_path: str) -> str:
 
 def _detect_doc_type(html_path: str, site_dir: str) -> str:
     rel = Path(html_path).relative_to(site_dir)
-    return "api" if rel.parts[0] == "api" else "reference"
+    return "api" if "api" in rel.parts else "reference"
 
 
 def _canonical_url(html_path: str, site_dir: str) -> str:

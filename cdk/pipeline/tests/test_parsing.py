@@ -310,10 +310,27 @@ def test_detect_doc_type_api(tmp_path):
     assert _detect_doc_type(str(html), str(site)) == "api"
 
 
+def test_detect_doc_type_api_versioned_path(tmp_path):
+    # Antora builds use versioned paths: 6.5-SNAPSHOT/api/java/...
+    site = tmp_path / "site"
+    (site / "6.5-SNAPSHOT" / "api" / "java").mkdir(parents=True)
+    html = site / "6.5-SNAPSHOT" / "api" / "java" / "BCryptPasswordEncoder.html"
+    html.write_text("x", encoding="utf-8")
+    assert _detect_doc_type(str(html), str(site)) == "api"
+
+
 def test_detect_doc_type_reference(tmp_path):
     site = tmp_path / "site"
     (site / "servlet").mkdir(parents=True)
     html = site / "servlet" / "auth.html"
+    html.write_text("x", encoding="utf-8")
+    assert _detect_doc_type(str(html), str(site)) == "reference"
+
+
+def test_detect_doc_type_reference_versioned_path(tmp_path):
+    site = tmp_path / "site"
+    (site / "6.5-SNAPSHOT" / "servlet").mkdir(parents=True)
+    html = site / "6.5-SNAPSHOT" / "servlet" / "auth.html"
     html.write_text("x", encoding="utf-8")
     assert _detect_doc_type(str(html), str(site)) == "reference"
 

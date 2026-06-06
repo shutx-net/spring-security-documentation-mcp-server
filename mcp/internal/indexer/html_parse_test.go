@@ -94,9 +94,14 @@ func TestInferDocType(t *testing.T) {
 		path string
 		want model.DocType
 	}{
-		{"api/java/org/springframework/security/Foo.html", model.DocTypeAPI},
+		// Antora versioned paths (e.g. 6.5-SNAPSHOT/api/...)
+		{"6.5-SNAPSHOT/api/java/org/springframework/security/Foo.html", model.DocTypeAPI},
+		{"7.0-SNAPSHOT/api/java/org/springframework/security/Foo.html", model.DocTypeAPI},
+		// flat api/ paths
 		{"api/index.html", model.DocTypeAPI},
+		// reference paths
 		{"servlet/authentication.html", model.DocTypeReference},
+		{"6.5-SNAPSHOT/servlet/authentication.html", model.DocTypeReference},
 		{"index.html", model.DocTypeReference},
 	}
 	for _, tc := range cases {
