@@ -21,10 +21,11 @@ func newEvalCmd() *cobra.Command {
 
 func newEvalScoreCmd() *cobra.Command {
 	var (
-		qrelsPath  string
-		runPath    string
-		kStr       string
-		outputPath string
+		qrelsPath          string
+		runPath            string
+		kStr               string
+		outputPath         string
+		relevanceThreshold int
 	)
 
 	cmd := &cobra.Command{
@@ -61,7 +62,7 @@ func newEvalScoreCmd() *cobra.Command {
 				return fmt.Errorf("load run: %w", err)
 			}
 
-			report, err := eval.ScoreRun(qrels, runEntries, eval.ScoreOptions{Ks: ks})
+			report, err := eval.ScoreRun(qrels, runEntries, eval.ScoreOptions{Ks: ks, RelevanceThreshold: relevanceThreshold})
 			if err != nil {
 				return fmt.Errorf("score run: %w", err)
 			}
@@ -84,6 +85,7 @@ func newEvalScoreCmd() *cobra.Command {
 	cmd.Flags().StringVar(&runPath, "run", "", "run JSONL file path [required]")
 	cmd.Flags().StringVar(&kStr, "k", "5,10", "comma-separated k values")
 	cmd.Flags().StringVar(&outputPath, "output", "", "output JSON report path (stdout if omitted)")
+	cmd.Flags().IntVar(&relevanceThreshold, "relevance-threshold", 2, "minimum qrel grade treated as relevant for binary metrics")
 	_ = cmd.MarkFlagRequired("qrels")
 	_ = cmd.MarkFlagRequired("run")
 	return cmd
