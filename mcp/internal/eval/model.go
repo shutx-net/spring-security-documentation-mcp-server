@@ -20,6 +20,7 @@ type RunEntry struct {
 type TopicMetric struct {
 	TopicID     string             `json:"topicId"`
 	NDCG        map[string]float64 `json:"ndcg"`        // e.g. {"ndcg@5": 0.9}
+	Precision   map[string]float64 `json:"precision"`   // e.g. {"precision@5": 0.4}
 	UnjudgedAtK map[string]int     `json:"unjudgedAtK"` // e.g. {"5": 1, "10": 2}
 }
 
@@ -32,7 +33,15 @@ type RunReport struct {
 	UnjudgedAtK map[string]float64 `json:"unjudgedAtK"` // mean unjudged per topic at k
 }
 
-// ScoreOptions controls nDCG computation.
+// ScoreOptions controls metric computation.
 type ScoreOptions struct {
-	Ks []int // k values to compute; defaults to [5, 10]
+	Ks                 []int // k values to compute; defaults to [5, 10]
+	RelevanceThreshold int   // minimum grade treated as relevant for Precision@k; defaults to 2
+}
+
+func (o ScoreOptions) relevanceThreshold() int {
+	if o.RelevanceThreshold <= 0 {
+		return 2
+	}
+	return o.RelevanceThreshold
 }
