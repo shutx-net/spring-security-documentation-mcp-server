@@ -105,6 +105,85 @@ func TestScoreRun_defaultKs(t *testing.T) {
 	if _, ok := report.Metrics["ndcg@10"]; !ok {
 		t.Error("expected ndcg@10 in metrics when Ks is empty")
 	}
+	if v := report.Metrics["precision@5"]; math.Abs(v-0.2) > 1e-9 {
+		t.Errorf("precision@5 = %f, want 0.2", v)
+	}
+	if v := report.Metrics["precision@10"]; math.Abs(v-0.1) > 1e-9 {
+		t.Errorf("precision@10 = %f, want 0.1", v)
+	}
+}
+
+func TestScoreRun_precisionDefaultThreshold(t *testing.T) {
+	// grade 3 and grade 2 are relevant (threshold=2 default)
+	// grade 1 is non-relevant
+	qrels := []Qrel{
+		{TopicID: "SS-001", ChunkID: "chunk-a", Grade: 3},
+		{TopicID: "SS-001", ChunkID: "chunk-b", Grade: 2},
+		{TopicID: "SS-001", ChunkID: "chunk-c", Grade: 1},
+	}
+	run := []RunEntry{
+		{RunID: "test", TopicID: "SS-001", Rank: 1, ChunkID: "chunk-a"}, // relevant
+		{RunID: "test", TopicID: "SS-001", Rank: 2, ChunkID: "chunk-b"}, // relevant
+		{RunID: "test", TopicID: "SS-001", Rank: 3, ChunkID: "chunk-c"}, // non-relevant
+	}
+	report, err := ScoreRun(qrels, run, ScoreOptions{Ks: []int{5}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 2 relevant in top-5, denominator=5 → 0.4
+	got := report.Metrics["precision@5"]
+	want := 0.4
+	if math.Abs(got-want) > 1e-9 {
+		t.Errorf("precision@5 = %f, want %f", got, want)
+	}
+	// TopicMetric also contains precision
+	if _, ok := report.Topics[0].Precision["precision@5"]; !ok {
+		t.Error("expected precision@5 in topic metrics")
+	}
+}
+
+func TestScoreRun_precisionCustomThreshold(t *testing.T) {
+	// threshold=3: only grade 3 is relevant
+	qrels := []Qrel{
+		{TopicID: "SS-001", ChunkID: "chunk-a", Grade: 3},
+		{TopicID: "SS-001", ChunkID: "chunk-b", Grade: 2},
+	}
+	run := []RunEntry{
+		{RunID: "test", TopicID: "SS-001", Rank: 1, ChunkID: "chunk-a"}, // relevant
+		{RunID: "test", TopicID: "SS-001", Rank: 2, ChunkID: "chunk-b"}, // non-relevant at threshold=3
+	}
+	report, err := ScoreRun(qrels, run, ScoreOptions{Ks: []int{5}, RelevanceThreshold: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 1 relevant in top-5, denominator=5 → 0.2
+	got := report.Metrics["precision@5"]
+	want := 0.2
+	if math.Abs(got-want) > 1e-9 {
+		t.Errorf("precision@5 = %f, want %f", got, want)
+	}
+}
+
+func TestScoreRun_precisionShortResultsUseKAsDenominator(t *testing.T) {
+	// Only 2 results, k=5: denominator must be 5
+	qrels := []Qrel{
+		{TopicID: "SS-001", ChunkID: "chunk-a", Grade: 3},
+		{TopicID: "SS-001", ChunkID: "chunk-b", Grade: 2},
+	}
+	run := []RunEntry{
+		{RunID: "test", TopicID: "SS-001", Rank: 1, ChunkID: "chunk-a"},
+		{RunID: "test", TopicID: "SS-001", Rank: 2, ChunkID: "chunk-b"},
+	}
+	report, err := ScoreRun(qrels, run, ScoreOptions{Ks: []int{5}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 2 relevant / 5 = 0.4
+	got := report.Metrics["precision@5"]
+	want := 0.4
+	if math.Abs(got-want) > 1e-9 {
+		t.Errorf("precision@5 = %f, want %f", got, want)
+	}
 }
 
 func TestScoreRun_topicSetFromQrels(t *testing.T) {

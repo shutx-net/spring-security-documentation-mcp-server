@@ -70,8 +70,10 @@ func ScoreRun(qrels []Qrel, runEntries []RunEntry, opts ScoreOptions) (*RunRepor
 	sort.Strings(topicIDs)
 
 	sumNDCG := make(map[int]float64)
+	sumPrecision := make(map[int]float64)
 	sumUnjudged := make(map[int]int)
 	topics := []TopicMetric{} // fix 4: empty slice so JSON encodes as [] not null
+	threshold := opts.relevanceThreshold()
 
 	for _, tid := range topicIDs {
 		chunkGrades := qrelMap[tid]
@@ -102,17 +104,23 @@ func ScoreRun(qrels []Qrel, runEntries []RunEntry, opts ScoreOptions) (*RunRepor
 		}
 
 		topicNDCG := make(map[string]float64)
+		topicPrecision := make(map[string]float64)
 		for _, k := range ks {
-			key := fmt.Sprintf("ndcg@%d", k)
+			ndcgKey := fmt.Sprintf("ndcg@%d", k)
 			// fix 6: use pre-sorted ideal grades, no repeated sort
 			idcg := DCG(idealSorted, k)
 			var v float64
 			if idcg > 0 {
 				v = DCG(resultGrades, k) / idcg
 			}
-			topicNDCG[key] = v
+			topicNDCG[ndcgKey] = v
 			sumNDCG[k] += v
 			sumUnjudged[k] += perTopicUnjudged[k]
+
+			precisionKey := fmt.Sprintf("precision@%d", k)
+			p := PrecisionAtK(resultGrades, k, threshold)
+			topicPrecision[precisionKey] = p
+			sumPrecision[k] += p
 		}
 
 		unjudgedStr := make(map[string]int, len(ks))
@@ -123,17 +131,18 @@ func ScoreRun(qrels []Qrel, runEntries []RunEntry, opts ScoreOptions) (*RunRepor
 		topics = append(topics, TopicMetric{
 			TopicID:     tid,
 			NDCG:        topicNDCG,
+			Precision:   topicPrecision,
 			UnjudgedAtK: unjudgedStr,
 		})
 	}
 
 	n := len(topicIDs)
-	metrics := make(map[string]float64, len(ks))
+	metrics := make(map[string]float64, len(ks)*2)
 	meanUnjudged := make(map[string]float64, len(ks))
 	for _, k := range ks {
-		key := fmt.Sprintf("ndcg@%d", k)
 		if n > 0 {
-			metrics[key] = sumNDCG[k] / float64(n)
+			metrics[fmt.Sprintf("ndcg@%d", k)] = sumNDCG[k] / float64(n)
+			metrics[fmt.Sprintf("precision@%d", k)] = sumPrecision[k] / float64(n)
 			meanUnjudged[strconv.Itoa(k)] = float64(sumUnjudged[k]) / float64(n)
 		}
 	}
