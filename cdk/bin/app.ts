@@ -43,6 +43,10 @@ if (config.domain) {
       ecrRepository: service.ecrRepository,
       ecsServiceArn: service.ecsServiceArn,
       indexerRepository: storage.indexerRepository,
+      config,
+      vectorBucket: storage.vectorBucket,
+      vectorIndex: storage.vectorIndex,
+      tables: storage.tables,
     });
     cicd.addDependency(service);
   }

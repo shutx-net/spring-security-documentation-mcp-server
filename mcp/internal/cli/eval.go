@@ -96,6 +96,7 @@ func newEvalScoreCmd() *cobra.Command {
 		runPath            string
 		kStr               string
 		outputPath         string
+		markdownOutputPath string
 		relevanceThreshold int
 	)
 
@@ -138,6 +139,17 @@ func newEvalScoreCmd() *cobra.Command {
 				return fmt.Errorf("score run: %w", err)
 			}
 
+			if markdownOutputPath != "" {
+				f, err := os.Create(markdownOutputPath)
+				if err != nil {
+					return fmt.Errorf("create markdown output: %w", err)
+				}
+				defer f.Close()
+				if _, err := f.WriteString(eval.RunReportToMarkdown(report)); err != nil {
+					return fmt.Errorf("write markdown output: %w", err)
+				}
+			}
+
 			out := os.Stdout
 			if outputPath != "" {
 				f, err := os.Create(outputPath)
@@ -156,6 +168,7 @@ func newEvalScoreCmd() *cobra.Command {
 	cmd.Flags().StringVar(&runPath, "run", "", "run JSONL file path [required]")
 	cmd.Flags().StringVar(&kStr, "k", "5,10", "comma-separated k values")
 	cmd.Flags().StringVar(&outputPath, "output", "", "output JSON report path (stdout if omitted)")
+	cmd.Flags().StringVar(&markdownOutputPath, "markdown-output", "", "write a Markdown summary table to this path (e.g. for GitHub Actions step summaries)")
 	cmd.Flags().IntVar(&relevanceThreshold, "relevance-threshold", 2, "minimum qrel grade treated as relevant for binary metrics")
 	_ = cmd.MarkFlagRequired("qrels")
 	_ = cmd.MarkFlagRequired("run")
