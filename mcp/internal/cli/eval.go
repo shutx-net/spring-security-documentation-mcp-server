@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -15,7 +16,77 @@ func newEvalCmd() *cobra.Command {
 		Use:   "eval",
 		Short: "Evaluate search quality",
 	}
+	cmd.AddCommand(newEvalRunCmd())
 	cmd.AddCommand(newEvalScoreCmd())
+	return cmd
+}
+
+func newEvalRunCmd() *cobra.Command {
+	var (
+		topicsPath string
+		runID      string
+		limit      int
+		outputPath string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "run",
+		Short: "Run evaluation topics against the search index and produce a run file",
+		Example: `  spring-security-docs-mcp eval run \
+    --topics eval/samples/topics.jsonl \
+    --run-id hybrid \
+    --limit  10 \
+    --output /tmp/eval/hybrid.run.jsonl`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			topicsFile, err := os.Open(topicsPath)
+			if err != nil {
+				return fmt.Errorf("open topics: %w", err)
+			}
+			defer topicsFile.Close()
+
+			topics, err := eval.LoadTopics(topicsFile)
+			if err != nil {
+				return fmt.Errorf("load topics: %w", err)
+			}
+
+			st, err := openAWSStore(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer st.Close()
+
+			log.Printf("Running %d topics against the search index (runId=%s, limit=%d)", len(topics), runID, limit)
+			entries, err := eval.SearchTopics(cmd.Context(), st, topics, eval.RunOptions{
+				RunID: runID,
+				Limit: limit,
+				OnTopic: func(i, total int, t eval.Topic) {
+					log.Printf("[%d/%d] searching topic %q", i, total, t.TopicID)
+				},
+			})
+			if err != nil {
+				return fmt.Errorf("run topics: %w", err)
+			}
+			log.Printf("Done: %d run entries from %d topics (runId=%s)", len(entries), len(topics), runID)
+
+			out := os.Stdout
+			if outputPath != "" {
+				f, err := os.Create(outputPath)
+				if err != nil {
+					return fmt.Errorf("create output: %w", err)
+				}
+				defer f.Close()
+				out = f
+			}
+			return eval.WriteRun(out, entries)
+		},
+	}
+
+	cmd.Flags().StringVar(&topicsPath, "topics", "", "topics JSONL file path [required]")
+	cmd.Flags().StringVar(&runID, "run-id", "", "identifier recorded in each run entry [required]")
+	cmd.Flags().IntVar(&limit, "limit", 10, "maximum number of results per topic (the search backend clamps values outside 1-20 to 10)")
+	cmd.Flags().StringVar(&outputPath, "output", "", "output run JSONL path (stdout if omitted)")
+	_ = cmd.MarkFlagRequired("topics")
+	_ = cmd.MarkFlagRequired("run-id")
 	return cmd
 }
 
