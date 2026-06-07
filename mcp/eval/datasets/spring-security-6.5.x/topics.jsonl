@@ -1,0 +1,2 @@
+{"topicId":"SS-001","query":"How do I configure SecurityFilterChain in Spring Security?","ref":"6.5.x","area":"servlet"}
+{"topicId":"SS-002","query":"When should CSRF protection be disabled in Spring Security?","ref":"6.5.x","area":"servlet"}
