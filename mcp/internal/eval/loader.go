@@ -24,6 +24,31 @@ func scanJSONL(r io.Reader, fn func([]byte) error) error {
 	return scanner.Err()
 }
 
+// LoadTopics reads JSONL-formatted evaluation topics from r.
+func LoadTopics(r io.Reader) ([]Topic, error) {
+	seen := make(map[string]struct{})
+	var topics []Topic
+	err := scanJSONL(r, func(line []byte) error {
+		var t Topic
+		if err := json.Unmarshal(line, &t); err != nil {
+			return fmt.Errorf("parse topic: %w", err)
+		}
+		if t.TopicID == "" {
+			return fmt.Errorf("missing topicId")
+		}
+		if t.Query == "" {
+			return fmt.Errorf("missing query for topicId %q", t.TopicID)
+		}
+		if _, dup := seen[t.TopicID]; dup {
+			return fmt.Errorf("duplicate topicId %q", t.TopicID)
+		}
+		seen[t.TopicID] = struct{}{}
+		topics = append(topics, t)
+		return nil
+	})
+	return topics, err
+}
+
 // LoadQrels reads JSONL-formatted relevance judgments from r.
 func LoadQrels(r io.Reader) ([]Qrel, error) {
 	type key struct{ topicID, chunkID string }

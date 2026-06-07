@@ -102,3 +102,48 @@ func TestLoadRun_emptyChunkId(t *testing.T) {
 		t.Fatal("expected error for missing chunkId")
 	}
 }
+
+func TestLoadTopics_basic(t *testing.T) {
+	input := `{"topicId":"SS-001","query":"How do I configure SecurityFilterChain in Spring Security?","ref":"6.5.x","area":"servlet"}
+{"topicId":"SS-002","query":"When should CSRF protection be disabled in Spring Security?"}
+`
+	topics, err := LoadTopics(strings.NewReader(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(topics) != 2 {
+		t.Fatalf("got %d topics, want 2", len(topics))
+	}
+	if topics[0].TopicID != "SS-001" || topics[0].Ref != "6.5.x" || topics[0].Area != "servlet" {
+		t.Errorf("unexpected topic[0]: %+v", topics[0])
+	}
+	if topics[1].TopicID != "SS-002" || topics[1].Ref != "" || topics[1].Area != "" {
+		t.Errorf("unexpected topic[1]: %+v", topics[1])
+	}
+}
+
+func TestLoadTopics_missingTopicId(t *testing.T) {
+	input := `{"query":"How do I configure SecurityFilterChain in Spring Security?"}`
+	_, err := LoadTopics(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected error for missing topicId")
+	}
+}
+
+func TestLoadTopics_missingQuery(t *testing.T) {
+	input := `{"topicId":"SS-001"}`
+	_, err := LoadTopics(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected error for missing query")
+	}
+}
+
+func TestLoadTopics_duplicateTopicId(t *testing.T) {
+	input := `{"topicId":"SS-001","query":"first"}
+{"topicId":"SS-001","query":"second"}
+`
+	_, err := LoadTopics(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected error for duplicate topicId")
+	}
+}

@@ -1,0 +1,76 @@
+name: Retrieval Evaluation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * *" # JST 03:00
+
+permissions:
+  id-token: write   # required for OIDC token issuance
+  contents: read
+
+jobs:
+  retrieval-eval:
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ap-northeast-1
+      EVAL_BUCKET: ${{ vars.EVAL_BUCKET }}
+      EVAL_PREFIX: eval/spring-security/6.5.x
+      RUN_ID: hybrid
+      CHUNKS_TABLE: ${{ vars.CHUNKS_TABLE }}
+      KEYWORDS_TABLE: ${{ vars.KEYWORDS_TABLE }}
+      VECTOR_BUCKET: ${{ vars.VECTOR_BUCKET }}
+      VECTOR_INDEX: ${{ vars.VECTOR_INDEX }}
+      EMBEDDING_MODEL_ID: ${{ vars.EMBEDDING_MODEL_ID }}
+      EMBEDDING_CACHE_TABLE: ${{ vars.EMBEDDING_CACHE_TABLE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: mcp/go.sum
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_EVAL_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build CLI
+        working-directory: mcp
+        run: go build -o /tmp/spring-security-docs-mcp ./cmd/spring-security-docs-mcp
+
+      - name: Download eval inputs
+        run: |
+          mkdir -p /tmp/eval
+          aws s3 cp "s3://${EVAL_BUCKET}/${EVAL_PREFIX}/topics.jsonl" /tmp/eval/topics.jsonl
+          aws s3 cp "s3://${EVAL_BUCKET}/${EVAL_PREFIX}/qrels.jsonl" /tmp/eval/qrels.jsonl
+
+      - name: Generate run.jsonl from the live index
+        run: |
+          /tmp/spring-security-docs-mcp eval run \
+            --topics /tmp/eval/topics.jsonl \
+            --run-id "${RUN_ID}" \
+            --limit 10 \
+            --output /tmp/eval/run.jsonl
+
+      - name: Score run
+        run: |
+          /tmp/spring-security-docs-mcp eval score \
+            --qrels /tmp/eval/qrels.jsonl \
+            --run /tmp/eval/run.jsonl \
+            --k 5,10 \
+            --relevance-threshold 2 \
+            --output /tmp/eval/summary.json \
+            --markdown-output /tmp/eval/summary.md
+
+      - name: Write step summary
+        run: cat /tmp/eval/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results to S3
+        run: |
+          aws s3 cp /tmp/eval/run.jsonl "s3://${EVAL_BUCKET}/${EVAL_PREFIX}/results/${{ github.run_id }}/run.jsonl"
+          aws s3 cp /tmp/eval/summary.json "s3://${EVAL_BUCKET}/${EVAL_PREFIX}/results/${{ github.run_id }}/summary.json"
