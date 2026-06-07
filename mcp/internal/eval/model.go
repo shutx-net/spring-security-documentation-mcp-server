@@ -1,5 +1,13 @@
 package eval
 
+// Topic is a single evaluation information need to run searches against.
+type Topic struct {
+	TopicID string `json:"topicId"`
+	Query   string `json:"query"`
+	Ref     string `json:"ref,omitempty"`
+	Area    string `json:"area,omitempty"`
+}
+
 // Qrel is a single relevance judgment: topic × chunk → grade.
 type Qrel struct {
 	TopicID string `json:"topicId"`
