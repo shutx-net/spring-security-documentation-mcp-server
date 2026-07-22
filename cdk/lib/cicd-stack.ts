@@ -152,7 +152,7 @@ export class CicdStack extends Stack {
     }));
 
     evalRole.addToPolicy(new iam.PolicyStatement({
-      actions: ['s3vectors:QueryVectors'],
+      actions: ['s3vectors:QueryVectors', 's3vectors:GetVectors'],
       resources: [
         vectorBucket.attrVectorBucketArn,
         vectorIndex.ref,
