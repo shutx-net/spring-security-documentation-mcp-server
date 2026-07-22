@@ -55,15 +55,31 @@ func queryVectors(
 // buildVectorFilter builds a metadata filter document for S3 Vectors.
 // Returns nil when no filter fields are set (no filtering applied).
 func buildVectorFilter(ref, area string) s3vdoc.Interface {
-	m := map[string]interface{}{}
-	if ref != "" {
-		m["ref"] = map[string]interface{}{"$eq": ref}
-	}
-	if area != "" {
-		m["area"] = map[string]interface{}{"$eq": area}
-	}
-	if len(m) == 0 {
+	m := vectorFilterDoc(ref, area)
+	if m == nil {
 		return nil
 	}
 	return s3vdoc.NewLazyDocument(m)
+}
+
+// vectorFilterDoc builds the metadata filter as a plain map.
+// S3 Vectors rejects implicit AND across multiple top-level keys with
+// "Invalid filter"; multiple field conditions must be wrapped in an
+// explicit $and. Returns nil when no filter fields are set.
+func vectorFilterDoc(ref, area string) map[string]interface{} {
+	var conds []map[string]interface{}
+	if ref != "" {
+		conds = append(conds, map[string]interface{}{"ref": map[string]interface{}{"$eq": ref}})
+	}
+	if area != "" {
+		conds = append(conds, map[string]interface{}{"area": map[string]interface{}{"$eq": area}})
+	}
+	switch len(conds) {
+	case 0:
+		return nil
+	case 1:
+		return conds[0]
+	default:
+		return map[string]interface{}{"$and": conds}
+	}
 }
