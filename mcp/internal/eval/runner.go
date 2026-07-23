@@ -51,10 +51,12 @@ func SearchTopics(ctx context.Context, st store.Store, topics []Topic, opts RunO
 		}
 		for i, c := range result.Chunks {
 			entries = append(entries, RunEntry{
-				RunID:   opts.RunID,
-				TopicID: t.TopicID,
-				Rank:    i + 1,
-				ChunkID: c.ID,
+				RunID:        opts.RunID,
+				TopicID:      t.TopicID,
+				Rank:         i + 1,
+				ChunkID:      c.ID,
+				CanonicalURL: c.CanonicalURL,
+				HeadingPath:  c.HeadingPath,
 			})
 		}
 	}

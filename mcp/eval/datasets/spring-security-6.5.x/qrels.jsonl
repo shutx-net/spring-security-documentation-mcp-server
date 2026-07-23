@@ -1,20 +1,20 @@
-{"topicId":"SS-001","chunkId":"f0fe3e3524d47d21837eb645faca596e941da453c6742a59cb250354193ba198","grade":3}
-{"topicId":"SS-001","chunkId":"7168b32cb41d1070ab616872863bc7175d71517138557de61b27b469c9b0d342","grade":3}
-{"topicId":"SS-001","chunkId":"6052b877c69326fb8a0787ad63f6216eb62de20a177f9f30542059533b79dd07","grade":3}
-{"topicId":"SS-001","chunkId":"d33b79a4b15a90e906444d7f210cc64c8c13baffd79a2cb9adb57a4454cc82f5","grade":3}
-{"topicId":"SS-001","chunkId":"201beb68ecefd6884437c46950af5bc23ea9690afb19afd8dc11da5d8533568b","grade":3}
-{"topicId":"SS-001","chunkId":"49c3dd6fbdfc180a9b280b507e1e7777b99cc6a6355a8b4a9b1e2263a33994be","grade":2}
-{"topicId":"SS-001","chunkId":"7b2d82f6bea152cf3ca393bfe41ceb3fef5b9877f9116c1a3f928cf0927c404f","grade":2}
-{"topicId":"SS-001","chunkId":"173ab8ed7ce4d81cba2776a9420ceaf4e8e5a3497f6837f5270244b3412bf69f","grade":2}
-{"topicId":"SS-001","chunkId":"950279ef45d74d1890126afe4a00c9323272982763ed7926ff280c9ea978899a","grade":1}
-{"topicId":"SS-001","chunkId":"fcff3ae14669aaa9e0ae8079f2c57b090aca12ece696ad195f1d47f54821c6c5","grade":1}
-{"topicId":"SS-002","chunkId":"1ab1547709b2bb2bde0a50e81e91059bbd29cc5aa9c61f8faa7ada54a2eec065","grade":3}
-{"topicId":"SS-002","chunkId":"cbd609fb13e3d9fd32205fdc6ce40fe8ac0612c185cc9af032091348eb21eaac","grade":2}
-{"topicId":"SS-002","chunkId":"d275660c1a0ae3cc2a588da58fa12c4eab4bcc37b5fa94e4d8e860bd44e08c8c","grade":2}
-{"topicId":"SS-002","chunkId":"7eee5cf67e30e6d41a37ae044643a2f8da201d6b5b9ade7b2385aa4093eddb35","grade":1}
-{"topicId":"SS-002","chunkId":"6c16079aea53fc22ef322209a57c991233a294d778580f9d1e5eb0d957a2ece1","grade":1}
-{"topicId":"SS-002","chunkId":"dc933af2eb3642bfb45c5e734ac70d8ff07ee41ddc693916761f08e49e0fce3a","grade":1}
-{"topicId":"SS-002","chunkId":"33aa4df91882ae80c7837398339c48f73c92687f38333ae36fad763d1370a223","grade":0}
-{"topicId":"SS-002","chunkId":"5f515fb6844ecf2cbcac9e1d94caacb911ad4c4648e99d96a7ade2c8ce382731","grade":0}
-{"topicId":"SS-002","chunkId":"d50d860e321c57070150f7ccaa3ff32ddd007697bfd61a0ae43c13112af735ba","grade":0}
-{"topicId":"SS-002","chunkId":"b2a1584fdf711819b2d50f55744c9161aad64a47803179985037d7c3732e0329","grade":0}
+{"topicId":"SS-001","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/configuration/java.html","headingPath":["Java Configuration","HttpSecurity","SecurityFilterChainEndpoints"],"grade":3}
+{"topicId":"SS-001","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/configuration/kotlin.html","headingPath":["Kotlin Configuration","HttpSecurity","Multiple HttpSecurity Instances"],"grade":3}
+{"topicId":"SS-001","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/configuration/kotlin.html","headingPath":["Kotlin Configuration","HttpSecurity","Real World Example"],"grade":3}
+{"topicId":"SS-001","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/configuration/java.html","headingPath":["Java Configuration","HttpSecurity","Multiple HttpSecurity Instances"],"grade":3}
+{"topicId":"SS-001","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/configuration/java.html","headingPath":["Java Configuration","HttpSecurity","Real World Example"],"grade":3}
+{"topicId":"SS-001","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/appendix/namespace/http.html","headingPath":["Web Application Security","<http>"],"grade":2}
+{"topicId":"SS-001","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/configuration/java.html","headingPath":["Java Configuration","Hello Web Security Java Configuration","AbstractSecurityWebApplicationInitializer without Existing Spring"],"grade":2}
+{"topicId":"SS-001","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/configuration/java.html","headingPath":["Java Configuration","Hello Web Security Java Configuration","AbstractSecurityWebApplicationInitializer"],"grade":2}
+{"topicId":"SS-001","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/appendix/namespace/http.html","headingPath":["Web Application Security","<filter-chain-map>","Child Elements of <filter-chain-map>"],"grade":2}
+{"topicId":"SS-001","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/configuration/xml-namespace.html","headingPath":["Security Namespace Configuration","Getting Started with Security Namespace Configuration","web.xml Configuration"],"grade":1}
+{"topicId":"SS-002","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/integrations/websocket.html","headingPath":["WebSocket Security","Working with SockJS","SockJS & Relaxing CSRF"],"grade":3}
+{"topicId":"SS-002","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/integrations/websocket.html","headingPath":["WebSocket Security","Enforcing Same Origin Policy","Disable CSRF within WebSockets"],"grade":3}
+{"topicId":"SS-002","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/exploits/csrf.html","headingPath":["Cross Site Request Forgery (CSRF)","Understanding CSRF Protection’s Components"],"grade":2}
+{"topicId":"SS-002","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/exploits/csrf.html","headingPath":["Cross Site Request Forgery (CSRF)","CSRF Considerations"],"grade":2}
+{"topicId":"SS-002","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/appendix/namespace/http.html","headingPath":["Web Application Security","<csrf>","<csrf> Attributes"],"grade":1}
+{"topicId":"SS-002","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/exploits/csrf.html","headingPath":["Cross Site Request Forgery (CSRF)","CSRF Considerations","Logging In"],"grade":1}
+{"topicId":"SS-002","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/exploits/csrf.html","headingPath":["Cross Site Request Forgery (CSRF)","Deferred Loading of theCsrfToken"],"grade":1}
+{"topicId":"SS-002","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/migration/servlet/exploits.html","headingPath":["Exploit Protection Migrations","Defer Loading CsrfToken"],"grade":1}
+{"topicId":"SS-002","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/exploits/csrf.html","headingPath":["Cross Site Request Forgery (CSRF)","Migrating to Spring Security 6"],"grade":1}
+{"topicId":"SS-002","canonicalUrl":"https://docs.spring.io/spring-security/reference/6.5-SNAPSHOT/servlet/integrations/jsp-taglibs.html","headingPath":["JSP Tag Libraries","The csrfInput Tag"],"grade":0}
