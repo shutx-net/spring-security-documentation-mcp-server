@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
 
 	gomcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/shutx-net/spring-security-documentation-mcp-server/internal/model"
@@ -33,11 +35,15 @@ type chunkSnippet struct {
 	Truncated    bool          `json:"truncated,omitempty"`
 }
 
-func toSnippet(c model.DocChunk) chunkSnippet {
+// toSnippet builds a reduced view of a chunk. When ContentText exceeds
+// searchSnippetMaxChars, it returns a window centered on the first occurrence of
+// query (KWIC) so the matched term is visible, falling back to the head of the
+// text when query is empty or absent (e.g. a vector-only hit).
+func toSnippet(c model.DocChunk, query string) chunkSnippet {
 	text := c.ContentText
 	truncated := false
-	if len([]rune(text)) > searchSnippetMaxChars {
-		text = string([]rune(text)[:searchSnippetMaxChars]) + "..."
+	if runes := []rune(text); len(runes) > searchSnippetMaxChars {
+		text = snippetWindow(runes, query)
 		truncated = true
 	}
 	return chunkSnippet{
@@ -54,6 +60,63 @@ func toSnippet(c model.DocChunk) chunkSnippet {
 		ContentText: text,
 		Truncated:   truncated,
 	}
+}
+
+// snippetWindow returns a searchSnippetMaxChars-rune window of runes centered on
+// the first case-insensitive occurrence of query, with "..." added on any
+// truncated side. When query is empty or not found it returns the leading
+// window (the previous behavior).
+func snippetWindow(runes []rune, query string) string {
+	start := 0
+	if mi := runeIndexFold(runes, query); mi > 0 {
+		lead := (searchSnippetMaxChars - len([]rune(query))) / 2
+		if lead < 0 {
+			lead = 0
+		}
+		start = mi - lead
+		if start < 0 {
+			start = 0
+		}
+	}
+	end := start + searchSnippetMaxChars
+	if end > len(runes) {
+		end = len(runes)
+		if start = end - searchSnippetMaxChars; start < 0 {
+			start = 0
+		}
+	}
+
+	var b strings.Builder
+	if start > 0 {
+		b.WriteString("...")
+	}
+	b.WriteString(string(runes[start:end]))
+	if end < len(runes) {
+		b.WriteString("...")
+	}
+	return b.String()
+}
+
+// runeIndexFold returns the rune index of the first case-insensitive occurrence
+// of needle in hay, or -1. Rune-based so the offset is safe to slice a []rune.
+func runeIndexFold(hay []rune, needle string) int {
+	nl := []rune(strings.ToLower(needle))
+	if len(nl) == 0 || len(nl) > len(hay) {
+		return -1
+	}
+	for i := 0; i+len(nl) <= len(hay); i++ {
+		match := true
+		for j, r := range nl {
+			if unicode.ToLower(hay[i+j]) != r {
+				match = false
+				break
+			}
+		}
+		if match {
+			return i
+		}
+	}
+	return -1
 }
 
 func capChunk(c model.DocChunk) model.DocChunk {
@@ -95,7 +158,7 @@ func newSearchHandler(st store.Store) func(context.Context, *gomcp.CallToolReque
 		}
 		snippets := make([]chunkSnippet, len(result.Chunks))
 		for i, c := range result.Chunks {
-			snippets[i] = toSnippet(c)
+			snippets[i] = toSnippet(c, args.Query)
 		}
 		return textResult(snippets)
 	}
