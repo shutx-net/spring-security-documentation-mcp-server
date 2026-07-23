@@ -3,7 +3,7 @@ name: Retrieval Evaluation
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 18 * * *" # JST 03:00
+    - cron: "0 18 * * 0" # 毎週月曜 JST 03:00
 
 permissions:
   id-token: write   # required for OIDC token issuance
@@ -12,11 +12,15 @@ permissions:
 jobs:
   retrieval-eval:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: [6.5.x, 7.0.x]
     env:
       AWS_REGION: ap-northeast-1
       EVAL_BUCKET: ${{ vars.EVAL_BUCKET }}
-      EVAL_PREFIX: eval/spring-security/6.5.x
-      RUN_ID: hybrid
+      EVAL_PREFIX: eval/spring-security/${{ matrix.ref }}
+      RUN_ID: hybrid-${{ matrix.ref }}
       CHUNKS_TABLE: ${{ vars.CHUNKS_TABLE }}
       KEYWORDS_TABLE: ${{ vars.KEYWORDS_TABLE }}
       VECTOR_BUCKET: ${{ vars.VECTOR_BUCKET }}
@@ -68,7 +72,9 @@ jobs:
             --markdown-output /tmp/eval/summary.md
 
       - name: Write step summary
-        run: cat /tmp/eval/summary.md >> "$GITHUB_STEP_SUMMARY"
+        # tee to both the step summary (rendered on the run page) and stdout
+        # (captured in the job log) so the metrics are retrievable via the API.
+        run: cat /tmp/eval/summary.md | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Upload results to S3
         run: |
