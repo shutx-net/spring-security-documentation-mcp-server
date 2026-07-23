@@ -22,6 +22,7 @@ func RunReportToMarkdown(report *RunReport) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Evaluation: %s\n\n", report.RunID)
 	fmt.Fprintf(&b, "Topics: %d\n\n", report.TopicCount)
+	fmt.Fprintf(&b, "Judged coverage: %d/%d retrieved matched a qrel\n\n", report.JudgedEntries, report.ScoredEntries)
 	b.WriteString("| k | nDCG@k | Precision@k |\n")
 	b.WriteString("| --- | --- | --- |\n")
 	for _, k := range sortedMetricKs(report.Metrics) {

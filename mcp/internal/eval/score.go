@@ -14,13 +14,15 @@ func ScoreRun(qrels []Qrel, runEntries []RunEntry, opts ScoreOptions) (*RunRepor
 		ks = []int{5, 10}
 	}
 
-	// Build qrel lookup: topicId -> chunkId -> grade
+	// Build qrel lookup: topicId -> judgedKey -> grade.
+	// judgedKey is the stable key (canonicalUrl+headingPath) when available,
+	// else the legacy chunkId, so scoring survives reindexing.
 	qrelMap := make(map[string]map[string]int)
 	for _, q := range qrels {
 		if qrelMap[q.TopicID] == nil {
 			qrelMap[q.TopicID] = make(map[string]int)
 		}
-		qrelMap[q.TopicID][q.ChunkID] = q.Grade
+		qrelMap[q.TopicID][q.judgedKey()] = q.Grade
 	}
 
 	// Group and validate run entries by topic.
@@ -50,10 +52,11 @@ func ScoreRun(qrels []Qrel, runEntries []RunEntry, opts ScoreOptions) (*RunRepor
 			return nil, fmt.Errorf("duplicate rank %d in topicId %q", e.Rank, e.TopicID) // fix 1
 		}
 		tr.seenRank[e.Rank] = struct{}{}
-		if _, dup := tr.seenChunk[e.ChunkID]; dup {
-			return nil, fmt.Errorf("duplicate chunkId %q in topicId %q", e.ChunkID, e.TopicID)
+		dkey := e.lookupKeys()[0] // run entries always carry a chunkId, so this is non-empty
+		if _, dup := tr.seenChunk[dkey]; dup {
+			return nil, fmt.Errorf("duplicate result %q in topicId %q", dkey, e.TopicID)
 		}
-		tr.seenChunk[e.ChunkID] = struct{}{}
+		tr.seenChunk[dkey] = struct{}{}
 		tr.entries = append(tr.entries, e)
 	}
 	for _, tr := range byTopic {
@@ -74,6 +77,7 @@ func ScoreRun(qrels []Qrel, runEntries []RunEntry, opts ScoreOptions) (*RunRepor
 	sumUnjudged := make(map[int]int)
 	topics := []TopicMetric{} // fix 4: empty slice so JSON encodes as [] not null
 	threshold := opts.relevanceThreshold()
+	var scoredEntries, judgedEntries int // coverage: total vs matched run entries
 
 	for _, tid := range topicIDs {
 		chunkGrades := qrelMap[tid]
@@ -90,8 +94,11 @@ func ScoreRun(qrels []Qrel, runEntries []RunEntry, opts ScoreOptions) (*RunRepor
 		perTopicUnjudged := make(map[int]int)
 		if tr, ok := byTopic[tid]; ok {
 			for idx, e := range tr.entries {
-				g, judged := chunkGrades[e.ChunkID]
-				if !judged {
+				scoredEntries++
+				g, judged := lookupGrade(chunkGrades, e)
+				if judged {
+					judgedEntries++
+				} else {
 					g = 0
 					for _, k := range ks {
 						if idx < k { // fix 2: array index, consistent with DCG i < k
@@ -148,10 +155,23 @@ func ScoreRun(qrels []Qrel, runEntries []RunEntry, opts ScoreOptions) (*RunRepor
 	}
 
 	return &RunReport{
-		RunID:       runID,
-		Metrics:     metrics,
-		TopicCount:  n,
-		Topics:      topics,
-		UnjudgedAtK: meanUnjudged,
+		RunID:         runID,
+		Metrics:       metrics,
+		TopicCount:    n,
+		Topics:        topics,
+		UnjudgedAtK:   meanUnjudged,
+		ScoredEntries: scoredEntries,
+		JudgedEntries: judgedEntries,
 	}, nil
+}
+
+// lookupGrade finds the grade for a run entry, matching on its stable key first
+// and its legacy chunkId second, so both fixture formats resolve.
+func lookupGrade(chunkGrades map[string]int, e RunEntry) (int, bool) {
+	for _, k := range e.lookupKeys() {
+		if g, ok := chunkGrades[k]; ok {
+			return g, true
+		}
+	}
+	return 0, false
 }

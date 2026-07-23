@@ -4,8 +4,10 @@ import "testing"
 
 func TestRunReportToMarkdown(t *testing.T) {
 	report := &RunReport{
-		RunID:      "hybrid",
-		TopicCount: 2,
+		RunID:         "hybrid",
+		TopicCount:    2,
+		ScoredEntries: 20,
+		JudgedEntries: 9,
 		Metrics: map[string]float64{
 			"ndcg@5":       0.8234,
 			"ndcg@10":      0.7912,
@@ -19,6 +21,8 @@ func TestRunReportToMarkdown(t *testing.T) {
 	want := `## Evaluation: hybrid
 
 Topics: 2
+
+Judged coverage: 9/20 retrieved matched a qrel
 
 | k | nDCG@k | Precision@k |
 | --- | --- | --- |
@@ -38,6 +42,8 @@ func TestRunReportToMarkdown_emptyMetrics(t *testing.T) {
 	want := `## Evaluation: hybrid
 
 Topics: 0
+
+Judged coverage: 0/0 retrieved matched a qrel
 
 | k | nDCG@k | Precision@k |
 | --- | --- | --- |
