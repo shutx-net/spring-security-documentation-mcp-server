@@ -3,7 +3,7 @@ name: Retrieval Evaluation
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 18 * * *" # JST 03:00
+    - cron: "0 18 * * 0" # 毎週月曜 JST 03:00
 
 permissions:
   id-token: write   # required for OIDC token issuance
