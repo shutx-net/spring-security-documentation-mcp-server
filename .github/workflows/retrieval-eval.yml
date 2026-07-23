@@ -68,7 +68,9 @@ jobs:
             --markdown-output /tmp/eval/summary.md
 
       - name: Write step summary
-        run: cat /tmp/eval/summary.md >> "$GITHUB_STEP_SUMMARY"
+        # tee to both the step summary (rendered on the run page) and stdout
+        # (captured in the job log) so the metrics are retrievable via the API.
+        run: cat /tmp/eval/summary.md | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Upload results to S3
         run: |
