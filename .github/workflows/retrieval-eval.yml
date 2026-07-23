@@ -12,11 +12,15 @@ permissions:
 jobs:
   retrieval-eval:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: [6.5.x, 7.0.x]
     env:
       AWS_REGION: ap-northeast-1
       EVAL_BUCKET: ${{ vars.EVAL_BUCKET }}
-      EVAL_PREFIX: eval/spring-security/6.5.x
-      RUN_ID: hybrid
+      EVAL_PREFIX: eval/spring-security/${{ matrix.ref }}
+      RUN_ID: hybrid-${{ matrix.ref }}
       CHUNKS_TABLE: ${{ vars.CHUNKS_TABLE }}
       KEYWORDS_TABLE: ${{ vars.KEYWORDS_TABLE }}
       VECTOR_BUCKET: ${{ vars.VECTOR_BUCKET }}
