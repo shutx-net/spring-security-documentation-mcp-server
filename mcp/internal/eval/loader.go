@@ -50,8 +50,12 @@ func LoadTopics(r io.Reader) ([]Topic, error) {
 }
 
 // LoadQrels reads JSONL-formatted relevance judgments from r.
+//
+// A qrel must identify its chunk by a stable key (canonicalUrl, optionally with
+// headingPath) or by the legacy chunkId. Prefer the stable key: chunkId embeds
+// commitSha and breaks on reindex.
 func LoadQrels(r io.Reader) ([]Qrel, error) {
-	type key struct{ topicID, chunkID string }
+	type key struct{ topicID, judged string }
 	seen := make(map[key]struct{})
 	var qrels []Qrel
 	err := scanJSONL(r, func(line []byte) error {
@@ -62,15 +66,15 @@ func LoadQrels(r io.Reader) ([]Qrel, error) {
 		if q.TopicID == "" {
 			return fmt.Errorf("missing topicId")
 		}
-		if q.ChunkID == "" {
-			return fmt.Errorf("missing chunkId")
+		if q.ChunkID == "" && q.CanonicalURL == "" {
+			return fmt.Errorf("qrel for topicId %q needs chunkId or canonicalUrl", q.TopicID)
 		}
 		if q.Grade < 0 || q.Grade > 3 {
-			return fmt.Errorf("invalid grade %d for chunkId %q", q.Grade, q.ChunkID)
+			return fmt.Errorf("invalid grade %d in topicId %q", q.Grade, q.TopicID)
 		}
-		k := key{q.TopicID, q.ChunkID}
+		k := key{q.TopicID, q.judgedKey()}
 		if _, dup := seen[k]; dup {
-			return fmt.Errorf("duplicate (topicId, chunkId): (%q, %q)", q.TopicID, q.ChunkID)
+			return fmt.Errorf("duplicate judgment in topicId %q for %q", q.TopicID, q.judgedKey())
 		}
 		seen[k] = struct{}{}
 		qrels = append(qrels, q)

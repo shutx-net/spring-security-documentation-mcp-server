@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -46,7 +47,7 @@ func TestSearchTopics_basic(t *testing.T) {
 		t.Fatalf("got %d entries, want %d: %+v", len(entries), len(want), entries)
 	}
 	for i, e := range entries {
-		if e != want[i] {
+		if !reflect.DeepEqual(e, want[i]) {
 			t.Errorf("entry[%d] = %+v, want %+v", i, e, want[i])
 		}
 	}
@@ -78,7 +79,7 @@ func TestSearchTopics_multipleTopics(t *testing.T) {
 		t.Fatalf("got %d entries, want %d: %+v", len(entries), len(want), entries)
 	}
 	for i, e := range entries {
-		if e != want[i] {
+		if !reflect.DeepEqual(e, want[i]) {
 			t.Errorf("entry[%d] = %+v, want %+v", i, e, want[i])
 		}
 	}
@@ -198,7 +199,7 @@ func TestWriteRun_jsonl(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &got); err != nil {
 			t.Fatalf("line %d: %v", i, err)
 		}
-		if got != entries[i] {
+		if !reflect.DeepEqual(got, entries[i]) {
 			t.Errorf("line %d decoded = %+v, want %+v", i, got, entries[i])
 		}
 	}

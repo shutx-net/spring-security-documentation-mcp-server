@@ -23,10 +23,11 @@ func newEvalCmd() *cobra.Command {
 
 func newEvalRunCmd() *cobra.Command {
 	var (
-		topicsPath string
-		runID      string
-		limit      int
-		outputPath string
+		topicsPath  string
+		runID       string
+		limit       int
+		outputPath  string
+		failOnEmpty bool
 	)
 
 	cmd := &cobra.Command{
@@ -77,7 +78,16 @@ func newEvalRunCmd() *cobra.Command {
 				defer f.Close()
 				out = f
 			}
-			return eval.WriteRun(out, entries)
+			if err := eval.WriteRun(out, entries); err != nil {
+				return err
+			}
+			// Guardrail: an empty run means the search pipeline is broken
+			// (e.g. an auth or filter error). Fail loudly instead of letting
+			// a downstream score of nothing look "green".
+			if failOnEmpty && len(entries) == 0 {
+				return fmt.Errorf("no run entries produced from %d topics; the search pipeline is likely broken", len(topics))
+			}
+			return nil
 		},
 	}
 
@@ -85,6 +95,7 @@ func newEvalRunCmd() *cobra.Command {
 	cmd.Flags().StringVar(&runID, "run-id", "", "identifier recorded in each run entry [required]")
 	cmd.Flags().IntVar(&limit, "limit", 10, "maximum number of results per topic (the search backend clamps values outside 1-20 to 10)")
 	cmd.Flags().StringVar(&outputPath, "output", "", "output run JSONL path (stdout if omitted)")
+	cmd.Flags().BoolVar(&failOnEmpty, "fail-on-empty", true, "exit non-zero when no run entries are produced (guards against a silently broken search pipeline)")
 	_ = cmd.MarkFlagRequired("topics")
 	_ = cmd.MarkFlagRequired("run-id")
 	return cmd
@@ -98,6 +109,7 @@ func newEvalScoreCmd() *cobra.Command {
 		outputPath         string
 		markdownOutputPath string
 		relevanceThreshold int
+		failOnZeroJudged   bool
 	)
 
 	cmd := &cobra.Command{
@@ -160,7 +172,17 @@ func newEvalScoreCmd() *cobra.Command {
 				out = f
 			}
 
-			return eval.WriteJSONReport(out, report)
+			if err := eval.WriteJSONReport(out, report); err != nil {
+				return err
+			}
+			// Guardrail: retrieving results none of which are even in the qrels
+			// pool means the run and the fixture share no items — almost always
+			// a stale qrels fixture (chunkIds changed on reindex). Fail loudly
+			// so a 0.000 score is never mistaken for "green".
+			if failOnZeroJudged && report.ScoredEntries > 0 && report.JudgedEntries == 0 {
+				return fmt.Errorf("no retrieved chunk matched any qrel (0/%d judged); the qrels fixture is likely stale — regenerate it against the current index", report.ScoredEntries)
+			}
+			return nil
 		},
 	}
 
@@ -170,6 +192,7 @@ func newEvalScoreCmd() *cobra.Command {
 	cmd.Flags().StringVar(&outputPath, "output", "", "output JSON report path (stdout if omitted)")
 	cmd.Flags().StringVar(&markdownOutputPath, "markdown-output", "", "write a Markdown summary table to this path (e.g. for GitHub Actions step summaries)")
 	cmd.Flags().IntVar(&relevanceThreshold, "relevance-threshold", 2, "minimum qrel grade treated as relevant for binary metrics")
+	cmd.Flags().BoolVar(&failOnZeroJudged, "fail-on-zero-judged", true, "exit non-zero when no retrieved chunk matches any qrel (guards against a stale fixture)")
 	_ = cmd.MarkFlagRequired("qrels")
 	_ = cmd.MarkFlagRequired("run")
 	return cmd
