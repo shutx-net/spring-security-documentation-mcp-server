@@ -5,7 +5,7 @@
   <img src="https://img.shields.io/badge/status-experimental-orange" alt="Status: Experimental">
   <img src="https://img.shields.io/badge/MCP-Streamable%20HTTP-purple" alt="MCP: Streamable HTTP">
   <img src="https://img.shields.io/badge/Go-1.26.3-00ADD8?logo=go&logoColor=white" alt="Go 1.26.3">
-  <a href="https://github.com/shutx-net/spring-security-documentation-mcp-server/actions/workflows/ecr-push.yml"><img src="https://github.com/shutx-net/spring-security-documentation-mcp-server/actions/workflows/ecr-push.yml/badge.svg" alt="Build and Push to ECR"></a>
+  <a href="https://github.com/shutx-net/spring-security-documentation-mcp-server/actions/workflows/lambda-deploy.yml"><img src="https://github.com/shutx-net/spring-security-documentation-mcp-server/actions/workflows/lambda-deploy.yml/badge.svg" alt="Build and Deploy MCP Lambda"></a>
   <a href="https://github.com/shutx-net/spring-security-documentation-mcp-server/actions/workflows/indexer-ecr-push.yml"><img src="https://github.com/shutx-net/spring-security-documentation-mcp-server/actions/workflows/indexer-ecr-push.yml/badge.svg" alt="Build and Push Indexer to ECR"></a>
 </p>
 
@@ -89,13 +89,18 @@ The current hosted MCP endpoint is:
 https://ss-doc-mcp.shutx.net/mcp
 ```
 
-The server uses Streamable HTTP / SSE-style responses.
+The server speaks Streamable HTTP in stateless, JSON-response mode:
+
+- The endpoint takes `POST /mcp`. `GET /mcp` returns `405 Method Not Allowed` with an `Allow: POST` header, because no SSE stream is offered.
+- Responses are plain JSON-RPC with `Content-Type: application/json`, not `text/event-stream`.
+- Requests must still advertise `Accept: application/json, text/event-stream`. The Streamable HTTP transport rejects a POST that does not list both media types, even though the reply is JSON.
+- No session state is kept between requests, so `initialize` is optional: `tools/list` and `tools/call` work on their own.
 
 A successful initialization response includes:
 
 - `HTTP/2 200`
-- `Content-Type: text/event-stream`
-- `Mcp-Session-Id` response header
+- `Content-Type: application/json`
+- `Mcp-Session-Id` response header (sent on the `initialize` response only, and not validated on later requests)
 - JSON-RPC response body
 
 ## Using with Claude Code
@@ -131,24 +136,21 @@ Example successful response:
 
 ```text
 HTTP/2 200
-content-type: text/event-stream
+content-type: application/json
+cache-control: no-cache, no-transform
 mcp-session-id: <session-id>
 
-event: message
-data: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"logging":{},"tools":{"listChanged":true}},"protocolVersion":"2025-03-26","serverInfo":{"name":"spring-security-docs","version":"0.1.0"}}}
+{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"logging":{},"tools":{"listChanged":true}},"protocolVersion":"2025-03-26","serverInfo":{"name":"spring-security-docs","version":"0.1.0"}}}
 ```
 
 ## Listing tools
 
-After initialization, use the returned `Mcp-Session-Id` header for subsequent requests.
+Because the server is stateless, no session header is required and `initialize` does not have to be called first. An `Mcp-Session-Id` header may be sent, but it is not validated.
 
 ```bash
-SESSION_ID='<session-id>'
-
 curl -i -sS -X POST 'https://ss-doc-mcp.shutx.net/mcp' \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
-  -H "Mcp-Session-Id: ${SESSION_ID}" \
   --data '{
     "jsonrpc": "2.0",
     "id": 2,
@@ -162,12 +164,9 @@ curl -i -sS -X POST 'https://ss-doc-mcp.shutx.net/mcp' \
 Use `tools/call` with a tool name returned by `tools/list`.
 
 ```bash
-SESSION_ID='<session-id>'
-
 curl -i -sS -X POST 'https://ss-doc-mcp.shutx.net/mcp' \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
-  -H "Mcp-Session-Id: ${SESSION_ID}" \
   --data '{
     "jsonrpc": "2.0",
     "id": 3,

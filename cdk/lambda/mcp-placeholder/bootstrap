@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "placeholder: real code is deployed by .github/workflows/lambda-deploy.yml" >&2
+exit 1
