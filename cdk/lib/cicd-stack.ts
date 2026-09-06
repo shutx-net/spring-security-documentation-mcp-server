@@ -15,8 +15,6 @@ import { DocTables } from './storage-stack';
 export interface CicdStackProps extends StackProps {
   readonly githubOrg: string;
   readonly githubRepo: string;
-  readonly ecrRepository: ecr.IRepository;
-  readonly ecsServiceArn: string;
   readonly lambdaFunctionArn: string;
   readonly indexerRepository: ecr.IRepository;
   readonly config: AppConfig;
@@ -32,8 +30,6 @@ export class CicdStack extends Stack {
     const {
       githubOrg,
       githubRepo,
-      ecrRepository,
-      ecsServiceArn,
       lambdaFunctionArn,
       indexerRepository,
       config,
@@ -84,19 +80,13 @@ export class CicdStack extends Stack {
         'ecr:PutImage',
         'ecr:UploadLayerPart',
       ],
-      resources: [ecrRepository.repositoryArn, indexerRepository.repositoryArn],
+      resources: [indexerRepository.repositoryArn],
     }));
 
     // GetAuthorizationToken operates on * (not a specific repository).
     role.addToPolicy(new iam.PolicyStatement({
       actions: ['ecr:GetAuthorizationToken'],
       resources: ['*'],
-    }));
-
-    // ECS force-new-deployment after ECR push.
-    role.addToPolicy(new iam.PolicyStatement({
-      actions: ['ecs:UpdateService'],
-      resources: [ecsServiceArn],
     }));
 
     // Lambda code deploy after Go build.
