@@ -5,6 +5,7 @@ import { loadConfig } from '../lib/config';
 import { StorageStack } from '../lib/storage-stack';
 import { NetworkStack } from '../lib/network-stack';
 import { ServiceStack } from '../lib/service-stack';
+import { LambdaServiceStack } from '../lib/lambda-service-stack';
 import { PipelineStack } from '../lib/pipeline-stack';
 import { CicdStack } from '../lib/cicd-stack';
 
@@ -35,6 +36,16 @@ if (config.domain) {
   service.addDependency(network);
   service.addDependency(storage);
 
+  const lambdaService = new LambdaServiceStack(app, `${prefix}-lambda`, {
+    env,
+    config,
+    contentBucket: storage.contentBucket,
+    vectorBucket: storage.vectorBucket,
+    vectorIndex: storage.vectorIndex,
+    tables: storage.tables,
+  });
+  lambdaService.addDependency(storage);
+
   if (config.github) {
     const cicd = new CicdStack(app, `${prefix}-cicd`, {
       env,
@@ -42,6 +53,7 @@ if (config.domain) {
       githubRepo: config.github.repo,
       ecrRepository: service.ecrRepository,
       ecsServiceArn: service.ecsServiceArn,
+      lambdaFunctionArn: lambdaService.functionArn,
       indexerRepository: storage.indexerRepository,
       config,
       vectorBucket: storage.vectorBucket,
@@ -49,6 +61,7 @@ if (config.domain) {
       tables: storage.tables,
     });
     cicd.addDependency(service);
+    cicd.addDependency(lambdaService);
   }
 }
 

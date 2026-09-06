@@ -1,0 +1,92 @@
+name: Build and Deploy MCP Lambda
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mcp/**'
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # required for OIDC token issuance
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: mcp/go.sum
+
+      - name: Test
+        run: go test ./...
+        working-directory: mcp
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: mcp/go.sum
+
+      - name: Build bootstrap
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
+            -tags lambda.norpc \
+            -ldflags='-s -w' \
+            -trimpath \
+            -o bootstrap ./cmd/spring-security-docs-mcp-lambda
+        working-directory: mcp
+
+      - name: Package zip
+        run: zip -j function.zip bootstrap
+        working-directory: mcp
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update function code
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ vars.LAMBDA_FUNCTION_NAME }} \
+            --zip-file fileb://mcp/function.zip \
+            --publish
+
+      - name: Wait for the update to settle
+        run: |
+          aws lambda wait function-updated-v2 \
+            --function-name ${{ vars.LAMBDA_FUNCTION_NAME }}
+
+      - name: Smoke test
+        if: vars.MCP_SMOKE_URL != ''
+        env:
+          MCP_SMOKE_URL: ${{ vars.MCP_SMOKE_URL }}
+        run: |
+          response=$(curl -sS -X POST "$MCP_SMOKE_URL" \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"github-actions","version":"1"}}}')
+          echo "$response"
+          server_name=$(echo "$response" | jq -r '.result.serverInfo.name')
+          if [ "$server_name" != "spring-security-docs" ]; then
+            echo "unexpected serverInfo.name: $server_name" >&2
+            exit 1
+          fi
