@@ -5,16 +5,6 @@ export interface AppConfig {
   embeddingModelId: string;
   embeddingDimension: number;
 
-  ecs: {
-    cpu: number;
-    memoryMiB: number;
-    containerPort: number;
-    desiredCount: number;
-    minCapacity: number;
-    maxCapacity: number;
-    requestsPerTarget: number;
-  };
-
   lambda: {
     memoryMiB: number;
     timeoutSeconds: number;
@@ -25,13 +15,6 @@ export interface AppConfig {
 
   schedule: string;
   scheduleTimezone: string;
-
-  cloudflare: {
-    initialIpv4: string[];
-    initialIpv6: string[];
-    syncSchedule: string;
-    maxEntries: number;
-  };
 
   domain?: {
     domainName: string;
@@ -56,7 +39,7 @@ export function loadConfig(app: App): AppConfig {
   const someDomainSet = domainName || certificateArn;
   if (someDomainSet && !allDomainSet) {
     throw new Error(
-      'Custom domain requires both: domainName and certificateArn (ACM cert in the same region as ALB).',
+      'Custom domain requires both: domainName and certificateArn (ACM cert in the same region as the API).',
     );
   }
 
@@ -64,11 +47,9 @@ export function loadConfig(app: App): AppConfig {
     appName: ctx<string>('appName', 'spring-sec-mcp'),
     embeddingModelId: ctx<string>('embeddingModelId', 'amazon.titan-embed-text-v2:0'),
     embeddingDimension: ctx<number>('embeddingDimension', 1024),
-    ecs: ctx<AppConfig['ecs']>('ecs'),
     lambda: ctx<AppConfig['lambda']>('lambda'),
     schedule: ctx<string>('schedule'),
     scheduleTimezone: ctx<string>('scheduleTimezone', 'UTC'),
-    cloudflare: ctx<AppConfig['cloudflare']>('cloudflare'),
     domain: allDomainSet
       ? { domainName: domainName!, certificateArn: certificateArn! }
       : undefined,
