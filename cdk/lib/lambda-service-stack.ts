@@ -106,6 +106,10 @@ export class LambdaServiceStack extends Stack {
     const httpApi = new apigwv2.HttpApi(this, 'HttpApi', {
       defaultIntegration: new apigwv2Integrations.HttpLambdaIntegration('McpIntegration', fn),
       createDefaultStage: false,
+      // HTTP APIs cannot restrict callers by IP, so the execute-api endpoint would
+      // be a way to reach the server without passing through Cloudflare's WAF and
+      // rate limits. Disabling it leaves the custom domain as the only entry point.
+      disableExecuteApiEndpoint: true,
     });
 
     new apigwv2.HttpStage(this, 'DefaultStage', {
@@ -122,7 +126,7 @@ export class LambdaServiceStack extends Stack {
     this.functionName = fn.functionName;
 
     new CfnOutput(this, 'McpFunctionName', { value: fn.functionName });
-    new CfnOutput(this, 'HttpApiEndpoint', { value: httpApi.apiEndpoint });
+    new CfnOutput(this, 'PublicUrl', { value: `https://${config.domain.domainName}/mcp` });
     new CfnOutput(this, 'CloudflareOriginTarget', {
       value: domain.regionalDomainName,
       description: 'Repoint the Cloudflare CNAME to this DNS name',
