@@ -29,6 +29,14 @@
             "requestsPerTarget": 500
         },
 
+        "lambda": {
+            "memoryMiB": 512,
+            "timeoutSeconds": 29,
+            "reservedConcurrency": 20,
+            "throttleRateLimit": 20,
+            "throttleBurstLimit": 40
+        },
+
         "schedule": "rate(10 days)",
         "scheduleTimezone": "UTC",
 

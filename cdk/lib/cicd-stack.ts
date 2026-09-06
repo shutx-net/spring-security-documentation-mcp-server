@@ -17,6 +17,7 @@ export interface CicdStackProps extends StackProps {
   readonly githubRepo: string;
   readonly ecrRepository: ecr.IRepository;
   readonly ecsServiceArn: string;
+  readonly lambdaFunctionArn: string;
   readonly indexerRepository: ecr.IRepository;
   readonly config: AppConfig;
   readonly vectorBucket: s3vectors.CfnVectorBucket;
@@ -33,6 +34,7 @@ export class CicdStack extends Stack {
       githubRepo,
       ecrRepository,
       ecsServiceArn,
+      lambdaFunctionArn,
       indexerRepository,
       config,
       vectorBucket,
@@ -95,6 +97,12 @@ export class CicdStack extends Stack {
     role.addToPolicy(new iam.PolicyStatement({
       actions: ['ecs:UpdateService'],
       resources: [ecsServiceArn],
+    }));
+
+    // Lambda code deploy after Go build.
+    role.addToPolicy(new iam.PolicyStatement({
+      actions: ['lambda:UpdateFunctionCode', 'lambda:GetFunction', 'lambda:PublishVersion'],
+      resources: [lambdaFunctionArn],
     }));
 
     new CfnOutput(this, 'GitHubActionsRoleArn', {

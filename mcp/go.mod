@@ -4,12 +4,14 @@ go 1.26.3
 
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
+	github.com/aws/aws-lambda-go v1.55.0
 	github.com/aws/aws-sdk-go-v2 v1.41.12
 	github.com/aws/aws-sdk-go-v2/config v1.32.20
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.42
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.53.4
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.57.6
 	github.com/aws/aws-sdk-go-v2/service/s3vectors v1.7.5
+	github.com/awslabs/aws-lambda-go-api-proxy v0.16.2
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/time v0.15.0
