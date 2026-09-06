@@ -15,6 +15,14 @@ export interface AppConfig {
     requestsPerTarget: number;
   };
 
+  lambda: {
+    memoryMiB: number;
+    timeoutSeconds: number;
+    reservedConcurrency: number;
+    throttleRateLimit: number;
+    throttleBurstLimit: number;
+  };
+
   schedule: string;
   scheduleTimezone: string;
 
@@ -57,6 +65,7 @@ export function loadConfig(app: App): AppConfig {
     embeddingModelId: ctx<string>('embeddingModelId', 'amazon.titan-embed-text-v2:0'),
     embeddingDimension: ctx<number>('embeddingDimension', 1024),
     ecs: ctx<AppConfig['ecs']>('ecs'),
+    lambda: ctx<AppConfig['lambda']>('lambda'),
     schedule: ctx<string>('schedule'),
     scheduleTimezone: ctx<string>('scheduleTimezone', 'UTC'),
     cloudflare: ctx<AppConfig['cloudflare']>('cloudflare'),
